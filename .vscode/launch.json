@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Streamlit: test/app.py",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "${workspaceFolder}/test/app.py"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}
