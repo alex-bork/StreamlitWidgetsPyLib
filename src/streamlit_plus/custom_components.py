@@ -1683,11 +1683,13 @@ export default function(component) {
     const textAlign = model.textAlign || "right";
     const statusColor = model.statusColor || "inactive";
     const size = model.size || "small";
-    const shape = model.avatarShape || "circle";
+    const shape = model.imageShape || "circle";
 
     const avatarSize =
         size === "small" ? "3rem" : size === "medium" ? "6rem" : "9rem";
-    const radius = shape === "circle" ? "50%" : "0.5rem";
+    const radius = shape === "circle"
+        ? "50%"
+        : "var(--st-base-radius, 0.5rem)";
     const sizes = {
         small: ["0.8125rem", "0.75rem"],
         medium: ["1.25rem", "0.875rem"],
@@ -1772,7 +1774,7 @@ def persona(
     text_align: Literal["left", "right", "bottom"] = "right",
     status_color: Literal["active", "inactive"] = "inactive",
     size: Literal["small", "medium", "large"] = "small",
-    avatar_shape: Literal["circle", "rounded"] = "circle",
+    image_shape: Literal["circle", "none"] = "circle",
     key: Optional[str] = None,
     width: Width = "stretch",
 ) -> None:
@@ -1789,10 +1791,11 @@ def persona(
         text_align: ``"right"`` (default), ``"left"`` or ``"bottom"``.
         status_color: ``"active"`` (primary) or ``"inactive"`` (default).
         size: ``"small"`` (default), ``"medium"`` or ``"large"``.
-        avatar_shape: ``"circle"`` (default) or ``"rounded"``.
+        image_shape: ``"circle"`` (default) or ``"none"``.
         key: Optional Streamlit widget key.
         width: Width of the widget.
     """
+
     if not name and not avatar_url and not status and not role:
         raise ValueError(
             "At least one of 'name', 'avatar_url', 'status' or 'role' must be "
@@ -1812,10 +1815,9 @@ def persona(
         raise ValueError(
             f"Invalid size {size!r}. Expected 'small', 'medium' or 'large'."
         )
-    if avatar_shape not in ("circle", "rounded"):
+    if image_shape not in ("circle", "none"):
         raise ValueError(
-            f"Invalid avatar_shape {avatar_shape!r}. Expected 'circle' or "
-            "'rounded'."
+            f"Invalid image_shape {image_shape!r}. Expected 'circle' or " "'none'."
         )
     data = json.dumps(
         {
@@ -1826,7 +1828,7 @@ def persona(
             "textAlign": text_align,
             "statusColor": status_color,
             "size": size,
-            "avatarShape": avatar_shape,
+            "imageShape": image_shape,
         }
     )
     with st.container(width=width):
