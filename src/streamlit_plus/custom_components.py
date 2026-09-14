@@ -476,6 +476,8 @@ _SMART_TABLE_CSS = """
 .stbl-toolbar .toolbar-btn .material-symbols-rounded {
     font-family: 'Material Symbols Rounded';
     font-size: 1.125rem;
+    font-weight: 300;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
 .stbl-pager {
     display: flex;
@@ -587,16 +589,17 @@ export default function(component) {
         }
         stateEl.dataset.stblMode = mode;
     }
-    const filterable = model.filterable === true;
-    const columnFilter = model.columnFilter === true;
-    // ``sortable`` may be true/false or a fixed direction string. A fixed
+    const filtering = model.filtering;
+    const filterable = filtering === "table" || filtering === "both";
+    const columnFilter = filtering === "column" || filtering === "both";
+    // ``sorting`` may be true/false or a fixed direction string. A fixed
     // direction restricts each column to that one order (toggle on/off).
-    const sortOpt = model.sortable;
+    const sortOpt = model.sorting;
     const fixedDir =
         sortOpt === "ascending" ? 1
         : sortOpt === "descending" ? -1
         : 0;
-    const sortable = fixedDir !== 0 || sortOpt === true;
+    const sorting = fixedDir !== 0 || sortOpt === true;
     // Rows per page (a positive integer) or 0/false to show everything.
     const pageSize =
         typeof model.pageSize === "number" && model.pageSize > 0
@@ -608,6 +611,11 @@ export default function(component) {
     const showToolbar = toolbarMode !== false && toolbarMode !== undefined;
     const showStandard = toolbarMode === true || toolbarMode === "both";
     const showCustom = toolbarMode === "custom" || toolbarMode === "both";
+    const toolbarAlign = model.toolbarAlign === "left"
+        ? "flex-start"
+        : model.toolbarAlign === "center"
+            ? "center"
+            : "flex-end";
     // Custom toolbar icons (Material name / ":material/x:" / emoji).
     const customIcons = Array.isArray(model.customToolbar)
         ? model.customToolbar
@@ -726,6 +734,7 @@ export default function(component) {
     if (showToolbar) {
         const bar = document.createElement("div");
         bar.className = "stbl-toolbar";
+        bar.style.justifyContent = toolbarAlign;
 
         if (showStandard) {
             const exportBtn = document.createElement("button");
@@ -914,7 +923,7 @@ export default function(component) {
             th.textContent = label;
         }
 
-        if (sortable) {
+        if (sorting) {
             // Ensure a flex header layout exists (columnFilter already made
             // one as ".th-head"; otherwise build it now).
             let head = th.querySelector(".th-head");
@@ -1280,7 +1289,7 @@ export default function(component) {
     document.addEventListener("click", onDocClick);
 
     // Material Symbols font for the filter icons.
-    if (columnFilter || sortable || showToolbar) {
+    if (columnFilter || sorting || showToolbar) {
         const fontLink = document.createElement("link");
         fontLink.className = "stbl-font";
         fontLink.rel = "stylesheet";
@@ -1315,18 +1324,19 @@ def smart_table(
     columns: List[str],
     rows: List[List[Any]],
     *,
-    selection_method: Literal["single", "multiple", "cell", "none"] = "none",
+    selecting: Literal["single", "multiple", "cell", "none"] = "none",
     selected: Optional[List[str]] = None,
     selected_cell: Optional[List[int]] = None,
     on_select: Optional[Callable[[Any], None]] = None,
     key: Optional[str] = None,
     width: Width = "stretch",
-    filter: Union[bool, Literal["table", "column", "both"]] = False,
-    sortable: Union[bool, Literal["ascending", "descending"]] = False,
+    filtering: Union[bool, Literal["table", "column", "both"]] = False,
+    sorting: Union[bool, Literal["ascending", "descending"]] = False,
     page_size: Union[bool, int] = False,
     column_width: Literal["auto", "content"] = "auto",
     banded_rows: bool = False,
     toolbar: Union[bool, Literal["custom", "both"]] = False,
+    toolbar_align: Literal["left", "center", "right"] = "right",
     custom_toolbar: Optional[List[List[Any]]] = None,
 ) -> Any:
     """Render a table with configurable selection.
@@ -1335,7 +1345,7 @@ def smart_table(
         columns: Column labels. A column's position is its key.
         rows: A list of rows, each a list of cell values aligned to
             ``columns`` by position. A row's id is its index (as a string).
-        selection_method: ``"single"`` (one row), ``"multiple"`` (many rows),
+        selecting: ``"single"`` (one row), ``"multiple"`` (many rows),
             ``"cell"`` (one cell) or ``"none"`` (default, not selectable).
         selected: Row ids (index strings) selected by default (row modes).
         selected_cell: ``[row_index, col_index]`` selected by default (cell
@@ -1346,13 +1356,13 @@ def smart_table(
         key: Optional Streamlit widget key.
         width: Width of the table. ``"stretch"`` (default), ``"content"``, or a
             fixed pixel width.
-        filter: Filtering mode. ``"table"`` shows a single search box that
+        filtering: Filtering mode. ``"table"`` shows a single search box that
             filters the whole table by a case-insensitive match across all
             cells. ``"column"`` shows a filter icon on each column header with
             a popover to filter (or exclude) that column; column filters
             combine (AND). ``"both"`` enables the table and column filters at
             the same time. ``False`` (default) disables filtering.
-        sortable: Column sorting. ``True`` shows sort controls that cycle
+        sorting: Column sorting. ``True`` shows sort controls that cycle
             ascending -> descending -> unsorted. ``"ascending"`` or
             ``"descending"`` restrict each column to that single direction
             (toggle on/off). ``False`` (default) disables sorting. Sorting is
@@ -1369,6 +1379,8 @@ def smart_table(
             (export to CSV). ``"custom"`` shows only the buttons defined in
             ``custom_toolbar``. ``"both"`` shows the standard buttons plus the
             custom ones. ``False`` (default) hides the toolbar.
+        toolbar_align: Horizontal alignment of the toolbar buttons: ``"left"``,
+            ``"center"`` or ``"right"`` (default).
         custom_toolbar: A list of ``[icon, callback]`` pairs. ``icon`` is an
             emoji or Material symbol (``"download"`` or ``":material/x:"``).
             Clicking the button calls ``callback(selection)`` with the current
@@ -1378,19 +1390,20 @@ def smart_table(
         Row modes: the list of selected row ids (empty when none). Cell mode:
         the selected ``[row_index, col_index]`` or ``None``.
     """
-    if selection_method not in ("single", "multiple", "cell", "none"):
+
+    if selecting not in ("single", "multiple", "cell", "none"):
         raise ValueError(
-            f"Invalid selection_method {selection_method!r}. Expected "
+            f"Invalid selecting {selecting!r}. Expected "
             "'single', 'multiple', 'cell' or 'none'."
         )
-    if sortable not in (True, False, "ascending", "descending"):
+    if sorting not in (True, False, "ascending", "descending"):
         raise ValueError(
-            f"Invalid sortable {sortable!r}. Expected True, False, "
+            f"Invalid sorting {sorting!r}. Expected True, False, "
             "'ascending' or 'descending'."
         )
-    if filter not in (False, "table", "column", "both"):
+    if filtering not in (False, "table", "column", "both"):
         raise ValueError(
-            f"Invalid filter {filter!r}. Expected 'table', 'column', 'both' "
+            f"Invalid filtering {filtering!r}. Expected 'table', 'column', 'both' "
             "or False."
         )
     if page_size is not False and (
@@ -1412,6 +1425,11 @@ def smart_table(
             f"Invalid toolbar {toolbar!r}. Expected True, False, 'custom' "
             "or 'both'."
         )
+    if toolbar_align not in ("left", "center", "right"):
+        raise ValueError(
+            f"Invalid toolbar_align {toolbar_align!r}. Expected 'left', "
+            "'center' or 'right'."
+        )
     custom_toolbar = custom_toolbar or []
 
     # Persist the selection across re-mounts (e.g. a light/dark theme switch
@@ -1419,11 +1437,11 @@ def smart_table(
     state_key = f"_stbl_sel_{key}"
     mode_key = f"_stbl_mode_{key}"
     # Changing the selection mode clears any stored selection.
-    if st.session_state.get(mode_key) != selection_method:
-        st.session_state[mode_key] = selection_method
+    if st.session_state.get(mode_key) != selecting:
+        st.session_state[mode_key] = selecting
         st.session_state.pop(state_key, None)
     stored = st.session_state.get(state_key)
-    if selection_method == "cell":
+    if selecting == "cell":
         init_cell = stored if stored is not None else selected_cell
         default_selected = []
     else:
@@ -1436,16 +1454,16 @@ def smart_table(
         {
             "columns": columns,
             "rows": rows,
-            "selectionMode": selection_method,
+            "selectionMode": selecting,
             "selected": default_selected,
             "selectedCell": init_cell,
-            "filterable": filter in ("table", "both"),
-            "columnFilter": filter in ("column", "both"),
-            "sortable": sortable,
+            "filtering": filtering,
+            "sorting": sorting,
             "pageSize": page_size if page_size is not False else 0,
             "columnWidth": column_width,
             "bandedRows": banded_rows,
             "toolbar": toolbar,
+            "toolbarAlign": toolbar_align,
             "customToolbar": [item[0] for item in custom_toolbar],
         }
     )
@@ -1457,7 +1475,7 @@ def smart_table(
             key=key,
         )
 
-    if selection_method == "cell":
+    if selecting == "cell":
         if result.selection is not None:
             current = json.loads(result.selection)
         else:
