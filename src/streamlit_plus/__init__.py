@@ -1,15 +1,23 @@
-from streamlit_widgets.widgets import (
-    Breadcrumbs,
-    BreadcrumbsLink,
+from streamlit_plus.custom_components import (
+    breadcrumbs,
+    card,
+    menu_tree,
+    persona,
+    smart_table,
+)
+from streamlit_plus.widgets import (
+    Box,
     FormWizard,
-    Persona,
     Step,
 )
 
 __all__ = [
-    "Breadcrumbs",
-    "BreadcrumbsLink",
+    "Box",
     "FormWizard",
-    "Persona",
     "Step",
+    "breadcrumbs",
+    "card",
+    "menu_tree",
+    "persona",
+    "smart_table",
 ]

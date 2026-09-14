@@ -1,108 +1,11 @@
 from typing import List, Optional
-import html
 from dataclasses import dataclass
-from typing import Callable, List, Literal, Optional
+from typing import Callable, List, Literal, Optional, Union
 
 import streamlit as st
 
-
-class BreadcrumbsLink:
-    """Describes one item in a breadcrumb navigation.
-
-    Args:
-        label: Text displayed for the breadcrumb item.
-        page_url: URL opened in the current browser tab. When ``None``, the
-            item is rendered as non-interactive text.
-    """
-
-    def __init__(self, label: str, page_url: Optional[str]):
-        self.label = label
-        self.page = page_url
-
-
-class Breadcrumbs:
-    """Renders a horizontal breadcrumb navigation in a Streamlit app.
-
-    Active items navigate to their URL in the current browser tab. Items
-    without a URL, or all items when ``link_disabled`` is ``True``, are
-    rendered without navigation and hover feedback.
-
-    Args:
-        links: Ordered breadcrumb items to display.
-        size: Text size of the breadcrumb items. ``"small"`` renders compact
-            labels; ``"normal"`` matches the app's default body text size.
-        all_links_disabled: Disables navigation and hover feedback for every
-            item.
-    """
-
-    _LABEL_FONT_SIZE = {"small": "0.75rem", "normal": "0.875rem"}
-    _SEPARATOR_FONT_SIZE = {"small": "1rem", "normal": "1.125rem"}
-
-    def __init__(
-        self,
-        links: List[BreadcrumbsLink],
-        size: Literal["small", "normal"] = "small",
-        all_links_disabled: bool = False,
-    ):
-        if size not in self._LABEL_FONT_SIZE:
-            raise ValueError(
-                f"Invalid size {size!r}. Expected one of "
-                f"{sorted(self._LABEL_FONT_SIZE)}."
-            )
-        self.__items = links
-        self.__size = size
-        self.__all_links_disabled = all_links_disabled
-        self.__render()
-
-    def __render(self):
-        """Render breadcrumb items and separators using the active theme."""
-        sidebar_background = st.get_option(
-            "theme.secondaryBackgroundColor"
-        ) or "var(--secondary-background-color, rgba(151, 166, 195, 0.25))"
-        label_font_size = self._LABEL_FONT_SIZE[self.__size]
-        separator_font_size = self._SEPARATOR_FONT_SIZE[self.__size]
-        st.markdown(
-            "<style>"
-            "a.breadcrumbLink:hover { "
-            f"background: {sidebar_background}; }}"
-            ".st-key-breadcrumbs p { margin: 0; }"
-            "</style>",
-            unsafe_allow_html=True,
-        )
-        with st.container(
-            key="breadcrumbs",
-            horizontal=True,
-            horizontal_alignment="left",
-            vertical_alignment="center",
-            gap=None,
-        ):
-            for i, item in enumerate(self.__items):
-                is_link_active = not self.__all_links_disabled and item.page is not None
-                link_attributes = (
-                    'class="breadcrumbLink" ' f'href="{item.page}" target="_self"'
-                    if is_link_active
-                    else 'class="breadcrumbLink" aria-disabled="true"'
-                )
-                link_tag = "a" if is_link_active else "span"
-                st.markdown(
-                    f"<{link_tag} {link_attributes} "
-                    'style="display: inline-flex; align-items: center; '
-                    "line-height: 1; border-radius: 3rem; "
-                    "color: inherit; font-family: inherit; "
-                    f"font-size: {label_font_size}; "
-                    'padding: 0.25rem 0.375rem; text-decoration: none;">'
-                    f"{item.label}</{link_tag}>",
-                    unsafe_allow_html=True,
-                )
-                if i < len(self.__items) - 1:
-                    st.markdown(
-                        '<span class="breadcrumbSeparator" '
-                        'style="display: inline-flex; align-items: center; '
-                        "line-height: 1; opacity: 0.6; color: inherit; "
-                        f"font-family: inherit; font-size: {separator_font_size}; "
-                        'padding: 0.25rem 0; margin: 0 0.25rem;">&rsaquo;</span>',
-                        unsafe_allow_html=True,
-                    )
+Width = Union[int, Literal["stretch", "content"]]
+Height = Union[int, Literal["stretch", "content"]]
 
 
 @dataclass
@@ -141,6 +44,8 @@ class FormWizard:
             wizard finished: no step is highlighted and both navigation
             buttons are disabled. When ``False`` (default), the wizard stays
             interactive after ``on_finish`` runs.
+        width: Width of the wizard. ``"stretch"`` (default), ``"content"``, or
+            a fixed pixel width.
 
     Example:
         >>> def account():
@@ -164,6 +69,7 @@ class FormWizard:
         on_next: Optional[Callable[[int], None]] = None,
         use_wizard_width: bool = True,
         inactive_on_finish: bool = False,
+        width: Width = "stretch",
     ):
         if not steps:
             raise ValueError("'steps' must contain at least one step.")
@@ -174,6 +80,7 @@ class FormWizard:
         self.__on_next = on_next
         self.__use_wizard_width = use_wizard_width
         self.__inactive_on_finish = inactive_on_finish
+        self.__width = width
         self.__render()
 
     def __render(self):
@@ -194,7 +101,7 @@ class FormWizard:
         is_last = active == len(self.__steps) - 1
 
         # One bordered container wrapping the whole widget.
-        with st.container(border=True):
+        with st.container(border=True, width=self.__width):
             if self.__name:
                 st.markdown(
                     f'<h3 style="text-align: center; margin: 0;">{self.__name}</h3>',
@@ -294,158 +201,67 @@ class FormWizard:
                 st.rerun()
 
 
-class Persona:
-    """Renders a persona card in a Streamlit app.
+class Box:
+    """Renders a rounded rectangle with a themed background in a Streamlit app.
 
-    Shows an avatar next to the person's name, role and status. When no
-    avatar URL is given, the person's initials are shown in a circle instead.
-    Only the fields that are provided are rendered.
+    The box background matches the sidebar/secondary background color and has
+    rounded corners. Its content is supplied as one or more callables that
+    render Streamlit widgets inside the box.
 
     Args:
-        name: Name of the person.
-        avatar_url: URL of the person's avatar image. When omitted, the
-            initials derived from ``name`` are shown.
-        role: Role or title of the person.
-        status: Short status text shown below the role (e.g. "Online").
-        text_align: Placement of the text relative to the avatar. ``"right"``
-            (default) puts the text to the right, ``"left"`` to the left, and
-            ``"bottom"`` centers the text below the avatar.
-        status_color: Color of the status text. ``"active"`` uses the primary
-            color (same as ``st.button(type="primary")``); ``"inactive"``
-            (default) uses a muted color.
-        size: Avatar size. ``"small"`` (default), ``"medium"`` or ``"large"``.
-    """
+        contents: One or more callables rendered inside the box.
+        key: Unique key used to scope the box styling. Use distinct keys when
+            rendering multiple boxes on the same page.
+        width: Width of the box. ``"stretch"`` (default), ``"content"``, or a
+            fixed pixel width.
+        height: Height of the box. ``None`` (default) uses Streamlit's standard
+            behavior; otherwise ``"stretch"``, ``"content"``, or a fixed pixel
+            height.
 
-    _TEXT_ALIGNS = ("left", "right", "bottom")
-    _STATUS_COLORS = ("active", "inactive")
-    _AVATAR_SIZE = {"small": "3rem", "medium": "6rem", "large": "9rem"}
+    Example:
+        >>> def body():
+        ...     st.write("Hello from inside the box!")
+        >>> Box(body)
+    """
 
     def __init__(
         self,
-        name: Optional[str] = None,
-        avatar_url: Optional[str] = None,
-        role: Optional[str] = None,
-        status: Optional[str] = None,
-        text_align: Literal["left", "right", "bottom"] = "right",
-        status_color: Literal["active", "inactive"] = "inactive",
-        size: Literal["small", "medium", "large"] = "small",
+        *contents: Callable[[], None],
+        key: str = "box",
+        width: Width = "stretch",
+        height: Optional[Height] = None,
     ):
-        if not name and not avatar_url and not status and not role:
-            raise ValueError(
-                "At least one of 'name', 'avatar_url', 'status' or 'role' "
-                "must be provided."
-            )
-        if text_align not in self._TEXT_ALIGNS:
-            raise ValueError(
-                f"Invalid text_align {text_align!r}. Expected one of "
-                f"{list(self._TEXT_ALIGNS)}."
-            )
-        if status_color not in self._STATUS_COLORS:
-            raise ValueError(
-                f"Invalid status_color {status_color!r}. Expected one of "
-                f"{list(self._STATUS_COLORS)}."
-            )
-        if size not in self._AVATAR_SIZE:
-            raise ValueError(
-                f"Invalid size {size!r}. Expected one of "
-                f"{sorted(self._AVATAR_SIZE)}."
-            )
-        self.__name = name
-        self.__avatar_url = avatar_url
-        self.__role = role
-        self.__status = status
-        self.__text_align = text_align
-        self.__status_color = status_color
-        self.__size = size
+        if not contents:
+            raise ValueError("At least one content callable must be provided.")
+        self.__contents = contents
+        self.__key = key
+        self.__width = width
+        self.__height = height
         self.__render()
 
-    @staticmethod
-    def __initials(name: Optional[str]) -> str:
-        if not name:
-            return "?"
-        parts = [p for p in name.split() if p]
-        if not parts:
-            return "?"
-        if len(parts) == 1:
-            return parts[0][0].upper()
-        return (parts[0][0] + parts[-1][0]).upper()
-
-    def __avatar_html(self) -> str:
-        size = self._AVATAR_SIZE[self.__size]
-        if self.__avatar_url:
-            src = html.escape(self.__avatar_url, quote=True)
-            alt = html.escape(self.__name or "", quote=True)
-            return (
-                f'<img src="{src}" alt="{alt}" '
-                f'style="width: {size}; height: {size}; border-radius: 50%; '
-                'object-fit: cover; flex: 0 0 auto;" />'
-            )
-        # Fallback: initials in a themed circle.
-        initials = html.escape(self.__initials(self.__name))
-        return (
-            f'<div style="width: {size}; height: {size}; border-radius: 50%; '
-            "flex: 0 0 auto; display: flex; align-items: center; "
-            "justify-content: center; font-weight: 600; "
-            "background: var(--secondary-background-color, rgba(151, 166, 195, 0.25)); "
-            f'color: inherit;">{initials}</div>'
-        )
-
     def __render(self):
-        name_size, role_size = {
-            "small": ("0.8125rem", "0.75rem"),
-            "medium": ("1rem", "0.875rem"),
-            "large": ("1.25rem", "1rem"),
-        }[self.__size]
-        status_size = role_size
-
-        lines = []
-        if self.__name:
-            lines.append(
-                f'<div style="font-weight: 600; line-height: 1.2; '
-                f'font-size: {name_size};">{html.escape(self.__name)}</div>'
-            )
-        if self.__role:
-            lines.append(
-                f'<div style="font-size: {role_size}; opacity: 0.75; '
-                f'line-height: 1.2;">{html.escape(self.__role)}</div>'
-            )
-        if self.__status:
-            if self.__status_color == "active":
-                status_style = (
-                    "color: var(--primary-color, #FF4B4B); font-weight: 600;"
-                )
-            else:
-                status_style = "opacity: 0.6;"
-            lines.append(
-                f'<div style="font-size: {status_size}; line-height: 1.2; '
-                f'{status_style}">{html.escape(self.__status)}</div>'
-            )
-        if self.__text_align == "bottom":
-            text_css_align = "center"
-            container_style = (
-                "display: flex; flex-direction: column; align-items: center; "
-                "gap: 0.5rem;"
-            )
-        elif self.__text_align == "left":
-            text_css_align = "right"
-            container_style = (
-                "display: flex; flex-direction: row-reverse; "
-                "align-items: center; gap: 0.625rem;"
-            )
-        else:  # "right"
-            text_css_align = "left"
-            container_style = (
-                "display: flex; flex-direction: row; align-items: center; "
-                "gap: 0.625rem;"
-            )
-        text_block = (
-            '<div style="display: flex; flex-direction: column; '
-            f'gap: 0.125rem; text-align: {text_css_align};">'
-            + "".join(lines)
-            + "</div>"
+        # Match the sidebar background: prefer the sidebar's own configured
+        # color, then the secondary background (the sidebar's default), then
+        # the CSS-variable fallback.
+        background = (
+            st.get_option("theme.sidebar.backgroundColor")
+            or st.get_option("theme.secondaryBackgroundColor")
+            or "var(--secondary-background-color, rgba(151, 166, 195, 0.25))"
         )
         st.markdown(
-            f'<div class="persona" style="{container_style}">'
-            f"{self.__avatar_html()}{text_block}</div>",
+            "<style>"
+            f".st-key-{self.__key} {{"
+            f"background: {background}; "
+            "border-radius: 0.75rem; "
+            "padding: 1rem;"
+            "}"
+            "</style>",
             unsafe_allow_html=True,
         )
+        with st.container(
+            key=self.__key,
+            width=self.__width,
+            height=self.__height if self.__height is not None else "content",
+        ):
+            for content in self.__contents:
+                content()
