@@ -258,7 +258,7 @@ if type == "Custom component":
             page_size=7,
             column_width="auto",
             active_columns=["Name", "Role", "Status"],
-            banded_rows=True,
+            colored_rows=True,
             standard_toolbar=True,
             standard_toolbar_exclude=["export_csv"],
             toolbar_align="right",

@@ -968,7 +968,7 @@ export default function(component) {
     table.classList.add(
         model.columnWidth === "content" ? "cw-content" : "cw-auto"
     );
-    const bandedRows = model.bandedRows === true;
+    const coloredRows = model.coloredRows === true;
 
     // Header row.
     const thead = document.createElement("thead");
@@ -1452,7 +1452,7 @@ export default function(component) {
         pageRows.forEach((tr, i) => {
             tr.style.display = "";
             // Band alternating visible rows (correct across pages/filtering).
-            if (bandedRows) tr.classList.toggle("banded", i % 2 === 1);
+            if (coloredRows) tr.classList.toggle("banded", i % 2 === 1);
         });
 
         // Track the last visible row so its bottom border can be removed
@@ -1567,9 +1567,19 @@ _smart_table_component = st.components.v2.component(
 )
 
 
+def _excel_column_name(index: int) -> str:
+    """Return a zero-based column index as an Excel-style label."""
+    label = ""
+    while index >= 0:
+        index, remainder = divmod(index, 26)
+        label = chr(ord("A") + remainder) + label
+        index -= 1
+    return label
+
+
 def smart_table(
-    columns: List[str],
-    rows: List[List[Any]],
+    columns: Optional[List[str]] = None,
+    rows: Optional[List[List[Any]]] = None,
     *,
     selecting: Literal["single", "multiple", "cell", "none"] = "none",
     on_select: Optional[Callable[[Any], None]] = None,
@@ -1579,7 +1589,7 @@ def smart_table(
     sorting: Union[bool, Literal["ascending", "descending"]] = False,
     page_size: Union[bool, int] = False,
     column_width: Literal["auto", "content"] = "auto",
-    banded_rows: bool = False,
+    colored_rows: bool = False,
     standard_toolbar: bool = True,
     standard_toolbar_exclude: Optional[
         Union[StandardToolbarAction, List[StandardToolbarAction]]
@@ -1591,8 +1601,10 @@ def smart_table(
     """Render a table with configurable selection.
 
     Args:
-        columns: Column labels. A column's position is its key.
-        rows: A list of rows, each a list of cell values aligned to
+        columns: Optional column labels. When omitted, columns are named using
+            Excel-style labels: ``A`` through ``Z``, then ``AA``, ``AB``, and
+            so on. A column's position is its key.
+        rows: Optional list of rows, each a list of cell values aligned to
             ``columns`` by position. A row's id is its index (as a string).
         selecting: ``"single"`` (one row), ``"multiple"`` (many rows),
             ``"cell"`` (one cell) or ``"none"`` (default, not selectable).
@@ -1619,7 +1631,7 @@ def smart_table(
         column_width: How columns are sized. ``"auto"`` (default) gives evenly
             sized columns and truncates overflowing text with an ellipsis.
             ``"content"`` sizes each column to its content without truncation.
-        banded_rows: When ``True``, alternating rows get a subtle background
+        colored_rows: When ``True``, alternating rows get a subtle background
             tint (zebra striping). Defaults to ``False``.
         standard_toolbar: Whether to show the standard toolbar buttons
             (export to CSV and column selection, plus clear filters when
@@ -1642,6 +1654,11 @@ def smart_table(
         Row modes: the list of selected row ids (empty when none). Cell mode:
         the selected ``[row_index, col_index]`` or ``None``.
     """
+
+    rows = rows or []
+    if columns is None or not columns:
+        column_count = max((len(row) for row in rows), default=0)
+        columns = [_excel_column_name(i) for i in range(column_count)]
 
     if selecting not in ("single", "multiple", "cell", "none"):
         raise ValueError(
@@ -1737,7 +1754,7 @@ def smart_table(
             "sorting": sorting,
             "pageSize": page_size if page_size is not False else 0,
             "columnWidth": column_width,
-            "bandedRows": banded_rows,
+            "coloredRows": colored_rows,
             "standardToolbar": standard_toolbar,
             "standardToolbarExclude": inactive_standard,
             "toolbarAlign": toolbar_align,
