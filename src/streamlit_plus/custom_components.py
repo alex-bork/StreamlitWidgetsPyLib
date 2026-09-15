@@ -409,7 +409,14 @@ _SMART_TABLE_CSS = """
     width: 2.5rem;
     text-align: center;
 }
-.stbl tbody tr { cursor: pointer; }
+.stbl tbody tr {
+    height: 2.35rem;
+    cursor: pointer;
+}
+.stbl tbody td {
+    height: 2.35rem;
+    box-sizing: border-box;
+}
 .stbl tbody tr.banded {
     background: color-mix(in srgb,
         var(--st-secondary-background-color) 55%, transparent);
@@ -420,6 +427,14 @@ _SMART_TABLE_CSS = """
 .stbl tbody tr.selected {
     background: var(--st-primary-color);
     color: var(--st-background-color);
+}
+.stbl tbody tr.selected:hover {
+    background: var(--st-primary-color);
+}
+.stbl tbody tr.selected td {
+    background: var(--st-primary-color);
+    color: var(--st-background-color);
+    border-color: white;
 }
 /* On a selected (primary) row, flip the checkbox/radio accent to the row's
    text color so it stays visible instead of blending primary-on-primary.
@@ -458,6 +473,9 @@ _SMART_TABLE_CSS = """
 .stbl th.visible-column-last:not(.col-selected),
 .stbl td.visible-column-last:not(.col-selected) {
     border-right: none;
+}
+.stbl tbody tr.selected td.visible-column-last {
+    border-right: 1px solid white;
 }
 .stbl input[type="checkbox"], .stbl input[type="radio"] {
     cursor: pointer;
