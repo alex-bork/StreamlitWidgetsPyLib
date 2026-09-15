@@ -524,6 +524,7 @@ _SMART_TABLE_CSS = """
 }
 .stbl-pager {
     display: flex;
+    position: relative;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.05rem;
@@ -554,30 +555,148 @@ _SMART_TABLE_CSS = """
     color: var(--st-primary-color);
     opacity: 1;
 }
+.stbl-pager .page-gap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    color: var(--st-text-color);
+    opacity: 0.7;
+}
 .stbl-column-pop {
-     position: absolute;
-     top: calc(100% + 0.25rem);
-     right: 0;
-     z-index: 1000;
-     min-width: 12rem;
-     box-sizing: border-box;
-     padding: 0.5rem;
-     background: var(--st-background-color);
-     border: 1px solid var(--st-border-color);
-     border-radius: var(--st-base-radius, 0.5rem);
-     box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.15);
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    z-index: 1000;
+    min-width: 12rem;
+    max-height: 18rem;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 0.375rem;
+    font: inherit;
+    color: var(--st-text-color);
+    background: var(--st-background-color);
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-base-radius, 0.5rem);
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.15);
 }
 .stbl-column-option {
-     display: flex;
-     align-items: center;
-     gap: 0.375rem;
-     padding: 0.25rem 0.125rem;
-     font-weight: 400;
-     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    font-weight: 400;
+    line-height: 1.25;
+    border-radius: calc(var(--st-base-radius, 0.5rem) - 0.125rem);
+    cursor: pointer;
+    white-space: nowrap;
 }
-.stbl-column-option input { accent-color: var(--st-primary-color); }
+.stbl-column-option:hover {
+    background: var(--st-secondary-background-color);
+}
+.stbl-column-option input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--st-primary-color);
+}
 .stbl-pager .pager-btn:disabled { opacity: 0.3; cursor: default; }
 .stbl-pager .pager-btn svg { display: block; }
+.stbl-pager .page-select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 4.25rem;
+    height: 1.75rem;
+    padding: 0.15rem 0.45rem;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--st-text-color);
+    text-align: center;
+    background: var(--st-background-color);
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-button-radius, var(--st-base-radius, 0.5rem));
+    outline: none;
+    cursor: pointer;
+    transition: border-color 120ms ease;
+}
+.stbl-pager .page-select:hover {
+    border-color: var(--st-border-color);
+}
+.stbl-pager .page-select:focus-visible {
+    border-color: var(--st-primary-color);
+}
+.stbl-pager .page-select[aria-expanded="true"] {
+    border-color: var(--st-primary-color);
+}
+.stbl-pager .page-menu {
+    position: fixed;
+    top: auto;
+    left: 0;
+    z-index: 1000;
+    min-width: 4.25rem;
+    transform: translateX(-50%);
+}
+.stbl-pager .page-menu-list {
+    max-height: 5.75rem;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 0.25rem;
+    background: var(--st-background-color);
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-base-radius, 0.5rem);
+}
+.stbl-pager .page-menu-list::-webkit-scrollbar {
+    display: none;
+}
+.stbl-pager .page-menu-arrow {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.2rem;
+    color: var(--st-text-color);
+    font-family: 'Material Symbols Rounded';
+    font-size: 1rem;
+    line-height: 1;
+    pointer-events: none;
+}
+.stbl-pager .page-menu-arrow-up {
+    position: absolute;
+    top: 0.2rem;
+    right: 0.35rem;
+    color: var(--st-text-color);
+    font-family: 'Material Symbols Rounded';
+    font-size: 1rem;
+    line-height: 1;
+    pointer-events: none;
+}
+.stbl-pager .page-menu.last-page .page-menu-arrow {
+    display: none !important;
+}
+.stbl-pager .page-option {
+    display: block;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+    font-size: 0.75rem;
+    color: var(--st-text-color);
+    text-align: center;
+    background: transparent;
+    border: 0;
+    border-radius: calc(var(--st-base-radius, 0.5rem) - 0.125rem);
+    cursor: pointer;
+}
+.stbl-pager .page-option:hover {
+    color: var(--st-text-color);
+    background: var(--st-secondary-background-color);
+}
+.stbl-pager .page-option.active {
+    color: var(--st-primary-color);
+    background: transparent;
+}
 .stbl-tooltip {
     position: fixed;
     z-index: 1000;
@@ -671,6 +790,7 @@ export default function(component) {
         typeof model.pageSize === "number" && model.pageSize > 0
             ? Math.floor(model.pageSize)
             : 0;
+    const switchPage = model.switchPage || "number";
     let currentPage = 0;
     // Standard controls are optional; custom controls automatically enable
     // the toolbar when at least one custom action is supplied.
@@ -1363,6 +1483,7 @@ export default function(component) {
     // Pagination controls (only rendered when pageSize > 0).
     const pager = document.createElement("div");
     pager.className = "stbl-pager";
+    let pageMenuCleanup = null;
     if (pageSize > 0) wrapper.appendChild(pager);
 
     // Whether a row passes the current table + column filters.
@@ -1381,47 +1502,186 @@ export default function(component) {
     }
 
     function renderPager(totalPages) {
+        if (pageMenuCleanup) {
+            pageMenuCleanup();
+            pageMenuCleanup = null;
+        }
         pager.textContent = "";
         if (pageSize <= 0 || totalPages <= 1) return;
 
-        // Inline SVG chevron (points left or right), aligns cleanly with the
-        // page numbers unlike the text glyphs.
-        const chevron = (dir) =>
+        if (switchPage === "selectbox") {
+            const select = document.createElement("button");
+            select.type = "button";
+            select.className = "page-select";
+            select.setAttribute("aria-label", "Select page");
+            select.setAttribute("aria-haspopup", "listbox");
+            select.setAttribute("aria-expanded", "false");
+            select.textContent = String(currentPage + 1);
+            const menu = document.createElement("div");
+            menu.className = "page-menu";
+            menu.setAttribute("role", "listbox");
+            menu.style.display = "none";
+            const menuList = document.createElement("div");
+            menuList.className = "page-menu-list";
+            menuList.setAttribute("role", "presentation");
+            let pageArrow = null;
+            let pageArrowUp = null;
+            for (let p = 0; p < totalPages; p++) {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.className = "page-option" +
+                    (p === currentPage ? " active" : "");
+                option.setAttribute("role", "option");
+                option.setAttribute("aria-selected", String(p === currentPage));
+                option.textContent = String(p + 1);
+                option.onclick = (e) => {
+                    e.stopPropagation();
+                    closeMenu();
+                    clearSelection(false);  // changing page drops the selection
+                    currentPage = p;
+                    updatePageArrow();
+                    applyFilters();
+                };
+                menuList.appendChild(option);
+            }
+            menu.appendChild(menuList);
+            if (menuList.childElementCount > 3) {
+                pageArrow = document.createElement("span");
+                pageArrow.className = "page-menu-arrow";
+                pageArrow.textContent = "expand_more";
+                pageArrow.title = "More pages below";
+                menu.appendChild(pageArrow);
+                pageArrowUp = document.createElement("span");
+                pageArrowUp.className = "page-menu-arrow-up";
+                pageArrowUp.textContent = "expand_less";
+                pageArrowUp.title = "More pages above";
+                menu.appendChild(pageArrowUp);
+            }
+            const updatePageArrow = () => {
+                menu.classList.toggle(
+                    "last-page", currentPage >= totalPages - 1
+                );
+                if (pageArrow) {
+                    pageArrow.style.display =
+                        currentPage < totalPages - 1 &&
+                        menuList.scrollTop + menuList.clientHeight <
+                            menuList.scrollHeight - 1
+                            ? ""
+                            : "none";
+                }
+                if (pageArrowUp) {
+                    pageArrowUp.style.display = menuList.scrollTop > 0
+                        ? ""
+                        : "none";
+                }
+            };
+            menuList.addEventListener("scroll", updatePageArrow);
+            updatePageArrow();
+            const positionMenu = () => {
+                if (menu.style.display === "none") return;
+                const rect = select.getBoundingClientRect();
+                menu.style.left = rect.left + rect.width / 2 + "px";
+                menu.style.top = rect.bottom + 4 + "px";
+            };
+            const closeMenu = () => {
+                menu.style.display = "none";
+                select.setAttribute("aria-expanded", "false");
+                window.removeEventListener("scroll", positionMenu, true);
+                window.removeEventListener("resize", positionMenu);
+                menuList.removeEventListener("scroll", updatePageArrow);
+                if (pageMenuCleanup === closeMenu) pageMenuCleanup = null;
+            };
+            menu._close = closeMenu;
+            select.onclick = (e) => {
+                e.stopPropagation();
+                const isOpen = menu.style.display !== "none";
+                if (!isOpen) {
+                    menu.style.display = "block";
+                    select.setAttribute("aria-expanded", "true");
+                    const activeOption = menuList.querySelector(
+                        ".page-option.active"
+                    );
+                    if (activeOption) {
+                        menuList.scrollTop = Math.max(
+                            0,
+                            activeOption.offsetTop -
+                                (menuList.clientHeight - activeOption.offsetHeight) / 2
+                        );
+                    }
+                    positionMenu();
+                    updatePageArrow();
+                    window.addEventListener("scroll", positionMenu, true);
+                    window.addEventListener("resize", positionMenu);
+                    pageMenuCleanup = closeMenu;
+                    return;
+                }
+                closeMenu();
+            };
+            pager.appendChild(select);
+            pager.appendChild(menu);
+            return;
+        }
+
+        const chevron = (direction) =>
             '<svg viewBox="0 0 24 24" width="10" height="10" ' +
             'fill="none" stroke="currentColor" stroke-width="3" ' +
             'stroke-linecap="round" stroke-linejoin="round">' +
             '<polyline points="' +
-            (dir === "left" ? "15 6 9 12 15 18" : "9 6 15 12 9 18") +
+            (direction === "left" ? "15 6 9 12 15 18" : "9 6 15 12 9 18") +
             '"></polyline></svg>';
-
-        const mkBtn = (content, page, opts) => {
-            opts = opts || {};
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "pager-btn" + (opts.active ? " active" : "");
-            if (opts.html) b.innerHTML = content;
-            else b.textContent = content;
-            if (opts.disabled) b.disabled = true;
-            else b.onclick = () => {
-                clearSelection(false);  // changing page drops the selection
-                currentPage = page;
-                applyFilters();
-            };
-            return b;
+        const makeButton = (content, page, options) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "pager-btn" +
+                (options.active ? " active" : "");
+            button.innerHTML = content;
+            if (options.disabled) {
+                button.disabled = true;
+            } else {
+                button.onclick = () => {
+                    clearSelection(false);  // changing page drops the selection
+                    currentPage = page;
+                    applyFilters();
+                };
+            }
+            return button;
         };
-
-        pager.appendChild(mkBtn(chevron("left"), currentPage - 1, {
+        pager.appendChild(makeButton(chevron("left"), currentPage - 1, {
             disabled: currentPage === 0,
-            html: true,
         }));
-        for (let p = 0; p < totalPages; p++) {
-            pager.appendChild(mkBtn(String(p + 1), p, {
-                active: p === currentPage,
-            }));
+        const pageTokens = [];
+        if (totalPages <= 7 || currentPage <= 3) {
+            for (let page = 0; page < Math.min(5, totalPages); page++) {
+                pageTokens.push(page);
+            }
+            if (totalPages > 6) pageTokens.push("gap", totalPages - 1);
+        } else if (currentPage >= totalPages - 4) {
+            pageTokens.push(0, "gap");
+            for (let page = Math.max(1, totalPages - 5); page < totalPages; page++) {
+                pageTokens.push(page);
+            }
+        } else {
+            pageTokens.push(
+                0, "gap", currentPage - 1, currentPage, currentPage + 1,
+                "gap", totalPages - 1
+            );
         }
-        pager.appendChild(mkBtn(chevron("right"), currentPage + 1, {
+        let previousToken = null;
+        pageTokens.forEach((page) => {
+            if (page === "gap") {
+                const gap = document.createElement("span");
+                gap.className = "page-gap";
+                gap.textContent = "...";
+                pager.appendChild(gap);
+            } else if (page !== previousToken) {
+                pager.appendChild(makeButton(String(page + 1), page, {
+                    active: page === currentPage,
+                }));
+            }
+            previousToken = page;
+        });
+        pager.appendChild(makeButton(chevron("right"), currentPage + 1, {
             disabled: currentPage >= totalPages - 1,
-            html: true,
         }));
     }
 
@@ -1529,6 +1789,11 @@ export default function(component) {
             });
         }
         if (columnPop) columnPop.style.display = "none";
+        const pageMenu = pager.querySelector(".page-menu");
+        const pageSelect = pager.querySelector(".page-select");
+        if (pageMenu && pageMenu._close) pageMenu._close();
+        else if (pageMenu) pageMenu.style.display = "none";
+        if (pageSelect) pageSelect.setAttribute("aria-expanded", "false");
     };
     document.addEventListener("click", onDocClick);
 
@@ -1588,6 +1853,7 @@ def smart_table(
     filtering: Union[bool, Literal["table", "column", "both"]] = False,
     sorting: Union[bool, Literal["ascending", "descending"]] = False,
     page_size: Union[bool, int] = False,
+    switch_page: Literal["number", "selectbox"] = "number",
     column_width: Literal["auto", "content"] = "auto",
     colored_rows: bool = False,
     standard_toolbar: bool = True,
@@ -1628,6 +1894,9 @@ def smart_table(
         page_size: Rows shown per page. An integer (e.g. ``5``) paginates the
             table with page controls below it. ``False`` (default) shows all
             rows without pagination.
+        switch_page: Pagination control to render. ``"number"`` shows arrow
+            and numbered buttons; ``"selectbox"`` shows a page selectbox.
+            Defaults to ``"number"``.
         column_width: How columns are sized. ``"auto"`` (default) gives evenly
             sized columns and truncates overflowing text with an ellipsis.
             ``"content"`` sizes each column to its content without truncation.
@@ -1680,6 +1949,10 @@ def smart_table(
     ):
         raise ValueError(
             f"Invalid page_size {page_size!r}. Expected a positive integer or " "False."
+        )
+    if switch_page not in ("number", "selectbox"):
+        raise ValueError(
+            f"Invalid switch_page {switch_page!r}. Expected 'number' or " "'selectbox'."
         )
     if column_width not in ("auto", "content"):
         raise ValueError(
@@ -1753,6 +2026,7 @@ def smart_table(
             "filtering": filtering,
             "sorting": sorting,
             "pageSize": page_size if page_size is not False else 0,
+            "switchPage": switch_page,
             "columnWidth": column_width,
             "coloredRows": colored_rows,
             "standardToolbar": standard_toolbar,
@@ -2149,8 +2423,11 @@ _CART_CSS = """
     height: 2rem;
 }
 .cart-widget.medium {
-    width: 2.5rem;
+    scrollbar-width: thin;
     height: 2.5rem;
+.stbl-pager .page-menu-list::-webkit-scrollbar {
+    display: none;
+}
 }
 .cart-widget.large {
     width: 3rem;

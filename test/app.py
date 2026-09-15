@@ -251,11 +251,50 @@ if type == "Custom component":
                     "Designs integrations for large enterprise customers and "
                     "advises on scalable, secure reference architectures.",
                 ],
+                [
+                    "Rachel Kim",
+                    "Platform Engineer",
+                    "Online",
+                    "Builds internal developer tooling and improves service "
+                    "reliability across the shared platform infrastructure.",
+                ],
+                [
+                    "Noah Williams",
+                    "Data Engineer",
+                    "Away",
+                    "Maintains ingestion pipelines and data-quality checks for "
+                    "the analytics and reporting systems.",
+                ],
+                [
+                    "Sofia Rossi",
+                    "Product Designer",
+                    "Busy",
+                    "Designs workflow improvements and contributes patterns to "
+                    "the shared product design system.",
+                ],
+                [
+                    "Daniel Okafor",
+                    "QA Engineer",
+                    "Online",
+                    "Expands automated coverage and monitors regression quality "
+                    "across the customer-facing applications.",
+                ],
+                *[
+                    [
+                        f"Demo User {index:02d}",
+                        ["Developer", "Designer", "Analyst", "Engineer"][index % 4],
+                        ["Online", "Away", "Busy", "Offline"][index % 4],
+                        f"Temporary generated record {index} for pagination "
+                        "and table interaction testing.",
+                    ]
+                    for index in range(1, 31)
+                ],
             ],
             selecting=mode,
             filtering="column",
             sorting=True,
             page_size=7,
+            switch_page="selectbox",
             column_width="auto",
             active_columns=["Name", "Role", "Status"],
             colored_rows=True,
