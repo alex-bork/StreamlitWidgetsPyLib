@@ -4,6 +4,10 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 import streamlit as st
 
 Width = Union[int, Literal["stretch", "content"]]
+# Keep this Literal synchronized with every standard toolbar control. Any new
+# standard function must be added here so it can be passed to
+# ``standard_toolbar_exclude``.
+StandardToolbarAction = Literal["select_columns", "export_csv", "clear_filters"]
 
 
 # ---------------------------------------------------------------------------
@@ -451,12 +455,17 @@ _SMART_TABLE_CSS = """
 .stbl tbody tr:last-child td.col-selected {
     border-bottom: 1px solid var(--st-primary-color);
 }
+.stbl th.visible-column-last:not(.col-selected),
+.stbl td.visible-column-last:not(.col-selected) {
+    border-right: none;
+}
 .stbl input[type="checkbox"], .stbl input[type="radio"] {
     cursor: pointer;
     accent-color: var(--st-primary-color);
 }
 .stbl-toolbar {
     display: flex;
+        position: relative;
     justify-content: flex-end;
     gap: 0;
     margin-bottom: 0.15rem;
@@ -473,9 +482,21 @@ _SMART_TABLE_CSS = """
     cursor: pointer;
     opacity: 0.7;
 }
-.stbl-toolbar .toolbar-btn:hover {
+.stbl-toolbar .toolbar-btn:hover:not(:disabled) {
     color: var(--st-primary-color);
     opacity: 1;
+}
+.stbl-toolbar .toolbar-btn.active {
+    color: var(--st-primary-color);
+    opacity: 1;
+}
+.stbl-toolbar .toolbar-btn:disabled {
+    cursor: default;
+    opacity: 0.35;
+}
+.stbl-toolbar .dynamic-toolbar-btn {
+    /* Dynamic controls stay at the outer edge of the button group. */
+    order: -1;
 }
 .stbl-toolbar .toolbar-btn .material-symbols-rounded {
     font-family: 'Material Symbols Rounded';
@@ -515,6 +536,28 @@ _SMART_TABLE_CSS = """
     color: var(--st-primary-color);
     opacity: 1;
 }
+.stbl-column-pop {
+     position: absolute;
+     top: calc(100% + 0.25rem);
+     right: 0;
+     z-index: 1000;
+     min-width: 12rem;
+     box-sizing: border-box;
+     padding: 0.5rem;
+     background: var(--st-background-color);
+     border: 1px solid var(--st-border-color);
+     border-radius: var(--st-base-radius, 0.5rem);
+     box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.15);
+}
+.stbl-column-option {
+     display: flex;
+     align-items: center;
+     gap: 0.375rem;
+     padding: 0.25rem 0.125rem;
+     font-weight: 400;
+     white-space: nowrap;
+}
+.stbl-column-option input { accent-color: var(--st-primary-color); }
 .stbl-pager .pager-btn:disabled { opacity: 0.3; cursor: default; }
 .stbl-pager .pager-btn svg { display: block; }
 .stbl-tooltip {
@@ -582,7 +625,7 @@ export default function(component) {
         modeMatches && stateEl.dataset ? stateEl.dataset.stblSelected : undefined;
     const initialSelected = savedSel !== undefined
         ? JSON.parse(savedSel)
-        : (model.selected || []);
+        : [];
     const selected = new Set(initialSelected);
     if (stateEl.dataset) {
         // Record the current mode and drop any saved selection from another
@@ -611,11 +654,17 @@ export default function(component) {
             ? Math.floor(model.pageSize)
             : 0;
     let currentPage = 0;
-    // toolbar: false | true (standard) | "custom" | "both".
-    const toolbarMode = model.toolbar;
-    const showToolbar = toolbarMode !== false && toolbarMode !== undefined;
-    const showStandard = toolbarMode === true || toolbarMode === "both";
-    const showCustom = toolbarMode === "custom" || toolbarMode === "both";
+    // Standard controls are optional; custom controls automatically enable
+    // the toolbar when at least one custom action is supplied.
+    const showStandard = model.standardToolbar === true;
+    const showCustom = Array.isArray(model.customToolbar) &&
+        model.customToolbar.length > 0;
+    const showToolbar = showStandard || showCustom;
+    const inactiveStandard = new Set(
+        Array.isArray(model.standardToolbarExclude)
+            ? model.standardToolbarExclude
+            : []
+    );
     const toolbarAlign = model.toolbarAlign === "left"
         ? "flex-start"
         : model.toolbarAlign === "center"
@@ -625,6 +674,8 @@ export default function(component) {
     const customIcons = Array.isArray(model.customToolbar)
         ? model.customToolbar
         : [];
+    let columnPop = null;
+    let clearFiltersBtn = null;
     // Preselected cell as [rowIndex, colIndex] or null (restored from a
     // previous mount when present).
     const savedCell =
@@ -633,10 +684,17 @@ export default function(component) {
             : undefined;
     let selectedCell = savedCell !== undefined
         ? JSON.parse(savedCell)
-        : (Array.isArray(model.selectedCell) ? model.selectedCell : null);
+        : null;
 
     // Per-column filter state: { value: string, exclude: bool }.
     const colFilters = columns.map(() => ({ value: "", exclude: false }));
+    const activeColumns = Array.isArray(model.activeColumns)
+        ? new Set(model.activeColumns)
+        : null;
+    const visibleColumns = columns.map(
+        (label) => activeColumns === null || activeColumns.has(label)
+    );
+    const columnElements = columns.map(() => []);
     // Collected references so filtering/sorting can reorder/show/hide rows.
     const rowEls = [];        // <tr> per row (indexed by original row id)
     const rowCells = [];      // raw cell text per row
@@ -742,9 +800,12 @@ export default function(component) {
         bar.style.justifyContent = toolbarAlign;
 
         if (showStandard) {
+            // Every standard toolbar control must have a matching value in
+            // StandardToolbarAction for standard_toolbar_exclude support.
             const exportBtn = document.createElement("button");
             exportBtn.type = "button";
             exportBtn.className = "toolbar-btn";
+            exportBtn.disabled = inactiveStandard.has("export_csv");
             exportBtn.title = "Export as CSV";
             const exportIcon = document.createElement("span");
             exportIcon.className = "material-symbols-rounded";
@@ -752,6 +813,74 @@ export default function(component) {
             exportBtn.appendChild(exportIcon);
             exportBtn.onclick = () => exportCsv();
             bar.appendChild(exportBtn);
+
+            columnPop = document.createElement("div");
+            columnPop.className = "stbl-column-pop";
+            columnPop.style.display = "none";
+            columns.forEach((label, colIndex) => {
+                const option = document.createElement("label");
+                option.className = "stbl-column-option";
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = visibleColumns[colIndex];
+                checkbox.onchange = () => {
+                    const visibleCount = visibleColumns.filter(Boolean).length;
+                    if (!checkbox.checked && visibleCount <= 1) {
+                        checkbox.checked = true;
+                        return;
+                    }
+                    visibleColumns[colIndex] = checkbox.checked;
+                    refreshColumnVisibility();
+                    columnBtn.classList.toggle(
+                        "active", visibleColumns.some((visible) => !visible)
+                    );
+                };
+                option.appendChild(checkbox);
+                option.appendChild(document.createTextNode(label));
+                columnPop.appendChild(option);
+            });
+            // Keep checkbox clicks inside the popover from reaching the
+            // document outside-click handler and closing the menu.
+            columnPop.onclick = (e) => e.stopPropagation();
+
+            const columnBtn = document.createElement("button");
+            columnBtn.type = "button";
+            columnBtn.className = "toolbar-btn";
+            columnBtn.disabled = inactiveStandard.has("select_columns");
+            columnBtn.title = "Select columns";
+            const columnIcon = document.createElement("span");
+            columnIcon.className = "material-symbols-rounded";
+            columnIcon.textContent = "view_column";
+            columnBtn.appendChild(columnIcon);
+            columnBtn.classList.toggle(
+                "active", visibleColumns.some((visible) => !visible)
+            );
+            columnBtn.onclick = (e) => {
+                e.stopPropagation();
+                columnPop.style.display =
+                    columnPop.style.display === "none" ? "block" : "none";
+            };
+            bar.appendChild(columnBtn);
+            bar.appendChild(columnPop);
+
+            if (filtering !== false) {
+                clearFiltersBtn = document.createElement("button");
+                clearFiltersBtn.type = "button";
+                clearFiltersBtn.className =
+                    "toolbar-btn dynamic-toolbar-btn";
+                // Dynamic toolbar actions stay on the button group's outer
+                // edge: left for right alignment, right for left or center.
+                // Keep this rule for every future dynamic toolbar action.
+                clearFiltersBtn.style.order =
+                    toolbarAlign === "flex-end" ? "-1" : "1";
+                clearFiltersBtn.title = "Clear all filters";
+                const clearFiltersIcon = document.createElement("span");
+                clearFiltersIcon.className = "material-symbols-rounded";
+                clearFiltersIcon.textContent = "filter_alt_off";
+                clearFiltersBtn.appendChild(clearFiltersIcon);
+                clearFiltersBtn.disabled = inactiveStandard.has("clear_filters");
+                bar.appendChild(clearFiltersBtn);
+            }
         }
 
         if (showCustom) {
@@ -834,6 +963,8 @@ export default function(component) {
     columns.forEach((label, colIndex) => {
         const th = document.createElement("th");
         th.dataset.col = String(colIndex);
+        th.style.display = visibleColumns[colIndex] ? "" : "none";
+        columnElements[colIndex].push(th);
         if (cellMode && selectedCell && selectedCell[1] === colIndex) {
             th.classList.add("col-selected");
         }
@@ -922,7 +1053,10 @@ export default function(component) {
                     value: valInput.value.trim().toLowerCase(),
                     exclude: exCb.checked,
                 };
-                icon.classList.toggle("active", colFilters[colIndex].value !== "");
+                icon.classList.toggle(
+                    "active",
+                    colFilters[colIndex].value !== "" || exCb.checked
+                );
                 currentPage = 0;  // reset to first page when filtering
                 applyFilters();
             };
@@ -1080,6 +1214,8 @@ export default function(component) {
         columns.forEach((label, i) => {
             const td = document.createElement("td");
             td.dataset.col = String(i);
+            td.style.display = visibleColumns[i] ? "" : "none";
+            columnElements[i].push(td);
             const value = row[i];
             const text =
                 value === undefined || value === null ? "" : String(value);
@@ -1182,11 +1318,29 @@ export default function(component) {
                 const td = document.createElement("td");
                 td.innerHTML = "&nbsp;";
                 tr.appendChild(td);
+                if (c < columns.length) columnElements[c].push(td);
             }
             tbody.appendChild(tr);
             fillerRows.push(tr);
         }
     }
+
+    function refreshColumnVisibility() {
+        let lastVisible = -1;
+        visibleColumns.forEach((visible, colIndex) => {
+            if (visible) lastVisible = colIndex;
+        });
+        columnElements.forEach((elements, colIndex) => {
+            const visible = visibleColumns[colIndex];
+            elements.forEach((el) => {
+                el.style.display = visible ? "" : "none";
+                el.classList.toggle(
+                    "visible-column-last", visible && colIndex === lastVisible
+                );
+            });
+        });
+    }
+    refreshColumnVisibility();
 
     // Pagination controls (only rendered when pageSize > 0).
     const pager = document.createElement("div");
@@ -1309,6 +1463,15 @@ export default function(component) {
         if (lastVisible) lastVisible.classList.add("no-bottom-border");
 
         renderPager(totalPages);
+        if (clearFiltersBtn) {
+            const columnFiltersActive = colFilters.some(
+                (filter) => filter.value !== "" || filter.exclude
+            );
+            const tableFilterActive = filterInput &&
+                filterInput.value.trim() !== "";
+            clearFiltersBtn.disabled = inactiveStandard.has("clear_filters") ||
+                !(columnFiltersActive || tableFilterActive);
+        }
     }
 
     if (filterInput) {
@@ -1318,12 +1481,36 @@ export default function(component) {
         };
     }
 
+    if (clearFiltersBtn) {
+        clearFiltersBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (filterInput) filterInput.value = "";
+            colFilters.forEach((filter) => {
+                filter.value = "";
+                filter.exclude = false;
+            });
+            thead.querySelectorAll(".filter-icon").forEach((icon) => {
+                icon.classList.remove("active");
+            });
+            thead.querySelectorAll(".filter-pop").forEach((pop) => {
+                const input = pop.querySelector(".stbl-filter");
+                const checkbox = pop.querySelector("input[type='checkbox']");
+                if (input) input.value = "";
+                if (checkbox) checkbox.checked = false;
+            });
+            currentPage = 0;
+            applyFilters();
+        };
+    }
+
     // Close open column-filter popovers when clicking elsewhere.
     const onDocClick = () => {
-        if (!columnFilter) return;
-        thead.querySelectorAll(".filter-pop").forEach((p) => {
-            p.style.display = "none";
-        });
+        if (columnFilter) {
+            thead.querySelectorAll(".filter-pop").forEach((p) => {
+                p.style.display = "none";
+            });
+        }
+        if (columnPop) columnPop.style.display = "none";
     };
     document.addEventListener("click", onDocClick);
 
@@ -1367,8 +1554,6 @@ def smart_table(
     rows: List[List[Any]],
     *,
     selecting: Literal["single", "multiple", "cell", "none"] = "none",
-    selected: Optional[List[str]] = None,
-    selected_cell: Optional[List[int]] = None,
     on_select: Optional[Callable[[Any], None]] = None,
     key: Optional[str] = None,
     width: Width = "stretch",
@@ -1377,9 +1562,13 @@ def smart_table(
     page_size: Union[bool, int] = False,
     column_width: Literal["auto", "content"] = "auto",
     banded_rows: bool = False,
-    toolbar: Union[bool, Literal["custom", "both"]] = False,
+    standard_toolbar: bool = True,
+    standard_toolbar_exclude: Optional[
+        Union[StandardToolbarAction, List[StandardToolbarAction]]
+    ] = None,
     toolbar_align: Literal["left", "center", "right"] = "right",
     custom_toolbar: Optional[List[List[Any]]] = None,
+    active_columns: Optional[List[str]] = None,
 ) -> Any:
     """Render a table with configurable selection.
 
@@ -1389,9 +1578,6 @@ def smart_table(
             ``columns`` by position. A row's id is its index (as a string).
         selecting: ``"single"`` (one row), ``"multiple"`` (many rows),
             ``"cell"`` (one cell) or ``"none"`` (default, not selectable).
-        selected: Row ids (index strings) selected by default (row modes).
-        selected_cell: ``[row_index, col_index]`` selected by default (cell
-            mode).
         on_select: Optional callback invoked with the current selection. In
             row modes it receives the list of selected ids; in cell mode it
             receives ``[row_index, col_index]`` or ``None``.
@@ -1417,16 +1603,22 @@ def smart_table(
             ``"content"`` sizes each column to its content without truncation.
         banded_rows: When ``True``, alternating rows get a subtle background
             tint (zebra striping). Defaults to ``False``.
-        toolbar: Toolbar above the table. ``True`` shows the standard buttons
-            (export to CSV). ``"custom"`` shows only the buttons defined in
-            ``custom_toolbar``. ``"both"`` shows the standard buttons plus the
-            custom ones. ``False`` (default) hides the toolbar.
+        standard_toolbar: Whether to show the standard toolbar buttons
+            (export to CSV and column selection, plus clear filters when
+            filtering is enabled). Defaults to ``True``.
+        standard_toolbar_exclude: One standard toolbar action or a list of
+            actions to disable. Supported values are ``"select_columns"``,
+            ``"export_csv"`` and ``"clear_filters"``. Disabled controls remain
+            visible.
         toolbar_align: Horizontal alignment of the toolbar buttons: ``"left"``,
             ``"center"`` or ``"right"`` (default).
         custom_toolbar: A list of ``[icon, callback]`` pairs. ``icon`` is an
             emoji or Material symbol (``"download"`` or ``":material/x:"``).
             Clicking the button calls ``callback(selection)`` with the current
             selection (row ids, or the ``[row, col]`` cell in cell mode).
+        active_columns: Optional list of column names shown initially. When
+            omitted, all columns are visible. The column-selection toolbar
+            button reflects this initial set.
 
     Returns:
         Row modes: the list of selected row ids (empty when none). Cell mode:
@@ -1458,15 +1650,48 @@ def smart_table(
         raise ValueError(
             f"Invalid column_width {column_width!r}. Expected 'auto' or " "'content'."
         )
-    if toolbar not in (True, False, "custom", "both"):
+    if not isinstance(standard_toolbar, bool):
         raise ValueError(
-            f"Invalid toolbar {toolbar!r}. Expected True, False, 'custom' " "or 'both'."
+            f"Invalid standard_toolbar {standard_toolbar!r}. Expected True or False."
+        )
+    if standard_toolbar_exclude is None:
+        inactive_standard = []
+    elif isinstance(standard_toolbar_exclude, str):
+        inactive_standard = [standard_toolbar_exclude]
+    elif isinstance(standard_toolbar_exclude, list):
+        inactive_standard = standard_toolbar_exclude
+    else:
+        raise ValueError(
+            "Invalid standard_toolbar_exclude. Expected a supported action "
+            "name or a list of action names."
+        )
+    valid_standard_actions = {"select_columns", "export_csv", "clear_filters"}
+    invalid_standard_actions = [
+        action for action in inactive_standard if action not in valid_standard_actions
+    ]
+    if invalid_standard_actions:
+        raise ValueError(
+            "Invalid standard_toolbar_exclude values: "
+            f"{invalid_standard_actions!r}. Expected one of "
+            f"{sorted(valid_standard_actions)!r}."
         )
     if toolbar_align not in ("left", "center", "right"):
         raise ValueError(
             f"Invalid toolbar_align {toolbar_align!r}. Expected 'left', "
             "'center' or 'right'."
         )
+    if active_columns is not None:
+        if not active_columns:
+            raise ValueError(
+                "Invalid active_columns. Expected at least one column name."
+            )
+        if len(set(active_columns)) != len(active_columns):
+            raise ValueError("Invalid active_columns. Column names must be unique.")
+        unknown_columns = [name for name in active_columns if name not in columns]
+        if unknown_columns:
+            raise ValueError(
+                f"Invalid active_columns. Unknown columns: {unknown_columns!r}."
+            )
     custom_toolbar = custom_toolbar or []
 
     # Persist the selection across re-mounts (e.g. a light/dark theme switch
@@ -1479,10 +1704,10 @@ def smart_table(
         st.session_state.pop(state_key, None)
     stored = st.session_state.get(state_key)
     if selecting == "cell":
-        init_cell = stored if stored is not None else selected_cell
+        init_cell = stored
         default_selected = []
     else:
-        default_selected = list(stored) if stored is not None else list(selected or [])
+        default_selected = list(stored) if stored is not None else []
         init_cell = None
 
     data = json.dumps(
@@ -1490,16 +1715,16 @@ def smart_table(
             "columns": columns,
             "rows": rows,
             "selectionMode": selecting,
-            "selected": default_selected,
-            "selectedCell": init_cell,
             "filtering": filtering,
             "sorting": sorting,
             "pageSize": page_size if page_size is not False else 0,
             "columnWidth": column_width,
             "bandedRows": banded_rows,
-            "toolbar": toolbar,
+            "standardToolbar": standard_toolbar,
+            "standardToolbarExclude": inactive_standard,
             "toolbarAlign": toolbar_align,
             "customToolbar": [item[0] for item in custom_toolbar],
+            "activeColumns": active_columns,
         }
     )
     with st.container(width=width):
@@ -1884,6 +2109,18 @@ _CART_CSS = """
     height: 2.5rem;
     color: var(--st-text-color);
 }
+.cart-widget.small {
+    width: 2rem;
+    height: 2rem;
+}
+.cart-widget.medium {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+.cart-widget.large {
+    width: 3rem;
+    height: 3rem;
+}
 .cart-widget .material-symbols-rounded {
     font-family: 'Material Symbols Rounded';
     font-size: 1.75rem;
@@ -1891,6 +2128,9 @@ _CART_CSS = """
     line-height: 1;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
+.cart-widget.small .material-symbols-rounded { font-size: 1.4rem; }
+.cart-widget.medium .material-symbols-rounded { font-size: 1.75rem; }
+.cart-widget.large .material-symbols-rounded { font-size: 2.1rem; }
 .cart-widget .cart-count {
     position: absolute;
     top: -0.1rem;
@@ -1908,6 +2148,16 @@ _CART_CSS = """
     font-weight: 600;
     line-height: 1;
 }
+.cart-widget.small .cart-count {
+    min-width: 0.95rem;
+    height: 0.95rem;
+    font-size: 0.625rem;
+}
+.cart-widget.large .cart-count {
+    min-width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.75rem;
+}
 """
 
 _CART_JS = r"""
@@ -1918,7 +2168,7 @@ export default function(component) {
 
     const model = JSON.parse(data || "{}");
     const root = document.createElement("div");
-    root.className = "cart-widget";
+    root.className = "cart-widget " + (model.size || "medium");
     root.title = "Shopping cart";
 
     const icon = document.createElement("span");
@@ -1928,7 +2178,7 @@ export default function(component) {
 
     const count = document.createElement("span");
     count.className = "cart-count";
-    count.textContent = String(model.itemsNumber || 0);
+    count.textContent = String(model.count || 0);
     root.appendChild(count);
 
     const fontLink = document.createElement("link");
@@ -1954,21 +2204,223 @@ _cart_component = st.components.v2.component(
 
 
 def cart(
-    items_number: Union[bool, int] = False,
+    size: Literal["small", "medium", "large"] = "medium",
+    count: int = 0,
     *,
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render a shopping-cart icon with the current item count."""
+    """Render a shopping-cart icon with an item-count badge."""
 
-    if (
-        not isinstance(items_number, int)
-        or isinstance(items_number, bool)
-        and items_number not in (False, True)
-        or items_number < 0
-    ):
-        raise ValueError("'items_number' must be a non-negative integer or False.")
-    count = int(items_number) if items_number else 0
-    data = json.dumps({"itemsNumber": count})
+    if size not in ("small", "medium", "large"):
+        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise ValueError("'count' must be a non-negative integer.")
+    data = json.dumps({"size": size, "count": count})
     with st.container(width=width):
         _cart_component(data=data, key=key)
+
+
+# ---------------------------------------------------------------------------
+# Box custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+
+_BOX_CSS = _CART_CSS.replace(".cart-widget", ".box-widget")
+_BOX_CSS = _BOX_CSS.replace(".cart-count", ".box-count")
+
+_BOX_JS = r"""
+export default function(component) {
+    const { data, parentElement } = component;
+    parentElement.querySelectorAll(".box-widget, link.box-font")
+        .forEach((el) => el.remove());
+
+    const model = JSON.parse(data || "{}");
+    const root = document.createElement("div");
+    root.className = "box-widget " + (model.size || "medium");
+    root.title = "Box";
+
+    const icon = document.createElement("span");
+    icon.className = "material-symbols-rounded";
+    icon.textContent = "inventory_2";
+    root.appendChild(icon);
+
+    const count = document.createElement("span");
+    count.className = "box-count";
+    count.textContent = String(model.count || 0);
+    root.appendChild(count);
+
+    const fontLink = document.createElement("link");
+    fontLink.className = "box-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
+    parentElement.appendChild(root);
+
+    return () => {
+        root.remove();
+        fontLink.remove();
+    };
+}
+"""
+
+_box_component = st.components.v2.component(
+    name="box",
+    css=_BOX_CSS,
+    js=_BOX_JS,
+)
+
+
+def box(
+    size: Literal["small", "medium", "large"] = "medium",
+    count: int = 0,
+    *,
+    key: Optional[str] = None,
+    width: Width = "content",
+) -> None:
+    """Render a box icon with a count badge."""
+
+    if size not in ("small", "medium", "large"):
+        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise ValueError("'count' must be a non-negative integer.")
+    data = json.dumps({"size": size, "count": count})
+    with st.container(width=width):
+        _box_component(data=data, key=key)
+
+
+# ---------------------------------------------------------------------------
+# Email custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+
+_EMAIL_CSS = _CART_CSS.replace(".cart-widget", ".email-widget")
+_EMAIL_CSS = _EMAIL_CSS.replace(".cart-count", ".email-count")
+
+_EMAIL_JS = r"""
+export default function(component) {
+    const { data, parentElement } = component;
+    parentElement.querySelectorAll(".email-widget, link.email-font")
+        .forEach((el) => el.remove());
+
+    const model = JSON.parse(data || "{}");
+    const root = document.createElement("div");
+    root.className = "email-widget " + (model.size || "medium");
+    root.title = "Email";
+
+    const icon = document.createElement("span");
+    icon.className = "material-symbols-rounded";
+    icon.textContent = "mail";
+    root.appendChild(icon);
+
+    const count = document.createElement("span");
+    count.className = "email-count";
+    count.textContent = String(model.count || 0);
+    root.appendChild(count);
+
+    const fontLink = document.createElement("link");
+    fontLink.className = "email-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
+    parentElement.appendChild(root);
+
+    return () => {
+        root.remove();
+        fontLink.remove();
+    };
+}
+"""
+
+_email_component = st.components.v2.component(
+    name="email",
+    css=_EMAIL_CSS,
+    js=_EMAIL_JS,
+)
+
+
+def email(
+    size: Literal["small", "medium", "large"] = "medium",
+    count: int = 0,
+    *,
+    key: Optional[str] = None,
+    width: Width = "content",
+) -> None:
+    """Render an email icon with an unread-count badge."""
+
+    if size not in ("small", "medium", "large"):
+        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise ValueError("'count' must be a non-negative integer.")
+    data = json.dumps({"size": size, "count": count})
+    with st.container(width=width):
+        _email_component(data=data, key=key)
+
+
+# ---------------------------------------------------------------------------
+# Chat message custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+
+_CHAT_MESSAGE_CSS = _CART_CSS.replace(".cart-widget", ".chat-message-widget")
+_CHAT_MESSAGE_CSS = _CHAT_MESSAGE_CSS.replace(".cart-count", ".chat-message-count")
+
+_CHAT_MESSAGE_JS = r"""
+export default function(component) {
+    const { data, parentElement } = component;
+    parentElement.querySelectorAll(
+        ".chat-message-widget, link.chat-message-font"
+    ).forEach((el) => el.remove());
+
+    const model = JSON.parse(data || "{}");
+    const root = document.createElement("div");
+    root.className = "chat-message-widget " + (model.size || "medium");
+    root.title = "Chat messages";
+
+    const icon = document.createElement("span");
+    icon.className = "material-symbols-rounded";
+    icon.textContent = "chat";
+    root.appendChild(icon);
+
+    const count = document.createElement("span");
+    count.className = "chat-message-count";
+    count.textContent = String(model.count || 0);
+    root.appendChild(count);
+
+    const fontLink = document.createElement("link");
+    fontLink.className = "chat-message-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
+    parentElement.appendChild(root);
+
+    return () => {
+        root.remove();
+        fontLink.remove();
+    };
+}
+"""
+
+_chat_message_component = st.components.v2.component(
+    name="chat_message",
+    css=_CHAT_MESSAGE_CSS,
+    js=_CHAT_MESSAGE_JS,
+)
+
+
+def chat_message(
+    size: Literal["small", "medium", "large"] = "medium",
+    count: int = 0,
+    *,
+    key: Optional[str] = None,
+    width: Width = "content",
+) -> None:
+    """Render a chat-message icon with an unread-count badge."""
+
+    if size not in ("small", "medium", "large"):
+        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise ValueError("'count' must be a non-negative integer.")
+    data = json.dumps({"size": size, "count": count})
+    with st.container(width=width):
+        _chat_message_component(data=data, key=key)

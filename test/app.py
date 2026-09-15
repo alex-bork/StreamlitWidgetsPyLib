@@ -9,6 +9,7 @@ from streamlit_plus import (
     persona,
     smart_table,
 )
+from streamlit_plus.custom_components import box, cart, chat_message, email
 
 SPACE_HEIGHT = 50
 
@@ -23,6 +24,18 @@ with st.sidebar:
 
 
 if type == "Custom component":
+    st.subheader("Icon components", anchor=False)
+
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        cart(size="medium", count=3)
+
+        box(size="medium", count=3)
+
+        email(size="medium", count=3)
+
+        chat_message(size="medium", count=3)
+
+    st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Breadcrumbs", anchor=False)
 
     breadcrumbs(
@@ -244,8 +257,10 @@ if type == "Custom component":
             sorting=True,
             page_size=7,
             column_width="auto",
+            active_columns=["Name", "Role", "Status"],
             banded_rows=True,
-            toolbar="both",
+            standard_toolbar=True,
+            standard_toolbar_exclude=["export_csv"],
             toolbar_align="right",
             custom_toolbar=[
                 [":material/delete:", lambda sel: st.toast(f"Delete {sel}")],
@@ -255,7 +270,7 @@ if type == "Custom component":
         )
 
     if selected_rows:
-        st.write(f"Selection: {selected_rows}")
+        st.toast(f"Selection: {selected_rows}")
 
 
 else:  # "Widgets"
