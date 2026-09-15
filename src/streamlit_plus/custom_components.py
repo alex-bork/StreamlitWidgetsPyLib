@@ -42,9 +42,10 @@ _MENU_TREE_CSS = """
 }
 .tg-node:hover { background: var(--st-background-color); }
 .tg-node.selected {
-    background: var(--st-primary-color);
-    color: var(--st-background-color);
+    background: transparent;
+    color: var(--st-primary-color);
 }
+.tg-node.selected:hover { background: transparent; }
 .tg-caret {
     font-family: 'Material Symbols Rounded';
     font-size: 1.125rem;
@@ -324,7 +325,7 @@ _SMART_TABLE_CSS = """
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 0.125rem;
 }
 .stbl .sort-btn {
     display: flex;
@@ -358,12 +359,13 @@ _SMART_TABLE_CSS = """
 .stbl .filter-pop {
     position: fixed;
     z-index: 1000;
+    box-sizing: border-box;
     padding: 0.5rem;
     min-width: 12rem;
     background: var(--st-background-color);
     border: 1px solid var(--st-border-color);
     border-radius: var(--st-base-radius, 0.5rem);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.15);
 }
 .stbl .filter-pop .stbl-filter { margin-bottom: 0.4rem; }
 .stbl .filter-clear {
@@ -371,9 +373,10 @@ _SMART_TABLE_CSS = """
     width: 100%;
     padding: 0.3rem 0.5rem;
     font: inherit;
-    color: var(--st-text-color);
-    background: var(--st-secondary-background-color);
-    border: 1px solid var(--st-border-color);
+    font-weight: 400;
+    color: var(--st-primary-content-color, white);
+    background: var(--st-primary-color);
+    border: 1px solid var(--st-primary-color);
     border-radius: var(--st-base-radius, 0.5rem);
     cursor: pointer;
     display: flex;
@@ -386,8 +389,9 @@ _SMART_TABLE_CSS = """
     font-size: 1.125rem;
 }
 .stbl .filter-clear:hover {
-    border-color: var(--st-primary-color);
-    color: var(--st-primary-color);
+    background: color-mix(in srgb, var(--st-primary-color) 85%, black);
+    border-color: color-mix(in srgb, var(--st-primary-color) 85%, black);
+    color: var(--st-primary-content-color, white);
 }
 .stbl .filter-exclude {
     display: flex;
@@ -525,7 +529,7 @@ _SMART_TABLE_CSS = """
     background: var(--st-background-color);
     border: 1px solid var(--st-border-color);
     border-radius: var(--st-base-radius, 0.5rem);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.15);
     white-space: normal;
     pointer-events: none;
 }
@@ -535,6 +539,7 @@ _SMART_TABLE_CSS = """
     margin-bottom: 0.5rem;
     padding: 0.35rem 0.5rem;
     font: inherit;
+    font-weight: 400;
     color: var(--st-text-color);
     background: var(--st-secondary-background-color);
     border: 1px solid transparent;
@@ -874,6 +879,44 @@ export default function(component) {
             clearBtn.appendChild(document.createTextNode("Clear"));
             pop.appendChild(clearBtn);
 
+            const positionPop = () => {
+                if (pop.style.display === "none") return;
+                const r = icon.getBoundingClientRect();
+                const sidebar = stateEl.ownerDocument.querySelector(
+                    '[data-testid="stSidebar"]'
+                );
+                const minLeft = Math.max(
+                    8,
+                    (sidebar ? sidebar.getBoundingClientRect().right : 0) + 8
+                );
+                const availableWidth = window.innerWidth - minLeft - 8;
+                if (pop.offsetWidth > availableWidth) {
+                    pop.style.minWidth = "0";
+                    pop.style.width = Math.max(0, availableWidth) + "px";
+                } else {
+                    pop.style.minWidth = "";
+                    pop.style.width = "";
+                }
+                const popWidth = pop.offsetWidth || 192;
+                let left = r.right - popWidth;
+                if (left < minLeft) left = minLeft;
+                const maxLeft = Math.max(
+                    minLeft,
+                    window.innerWidth - popWidth - 8
+                );
+                if (left > maxLeft) left = maxLeft;
+                pop.style.left = left + "px";
+                pop.style.top = r.bottom + 4 + "px";
+            };
+            // Capture scroll events from Streamlit's scrolling main section.
+            window.addEventListener("scroll", positionPop, true);
+            window.addEventListener("resize", positionPop);
+            const sidebar = stateEl.ownerDocument.querySelector(
+                '[data-testid="stSidebar"]'
+            );
+            const sidebarObserver = sidebar ? new ResizeObserver(positionPop) : null;
+            if (sidebarObserver) sidebarObserver.observe(sidebar);
+
             const apply = () => {
                 colFilters[colIndex] = {
                     value: valInput.value.trim().toLowerCase(),
@@ -900,22 +943,18 @@ export default function(component) {
                 const opening = pop.style.display === "none";
                 pop.style.display = opening ? "block" : "none";
                 if (opening) {
-                    // Position the fixed popover just under the icon, kept
-                    // within the viewport horizontally.
-                    const r = icon.getBoundingClientRect();
-                    const popWidth = pop.offsetWidth || 192;
-                    let left = r.right - popWidth;
-                    if (left < 8) left = 8;
-                    const maxLeft = window.innerWidth - popWidth - 8;
-                    if (left > maxLeft) left = maxLeft;
-                    pop.style.left = left + "px";
-                    pop.style.top = r.bottom + 4 + "px";
+                    positionPop();
                     // Focus the value input for immediate typing.
                     valInput.focus();
                 }
             };
             // Prevent clicks inside the popover from closing it.
             pop.onclick = (e) => e.stopPropagation();
+            pop._cleanup = () => {
+                window.removeEventListener("scroll", positionPop, true);
+                window.removeEventListener("resize", positionPop);
+                if (sidebarObserver) sidebarObserver.disconnect();
+            };
 
             head.appendChild(pop);
             th.appendChild(head);
@@ -1304,6 +1343,9 @@ export default function(component) {
 
     return () => {
         document.removeEventListener("click", onDocClick);
+        thead.querySelectorAll(".filter-pop").forEach((pop) => {
+            if (pop._cleanup) pop._cleanup();
+        });
         parentElement.querySelectorAll("link.stbl-font").forEach((el) =>
             el.remove()
         );
@@ -1407,23 +1449,18 @@ def smart_table(
             "or False."
         )
     if page_size is not False and (
-        not isinstance(page_size, int)
-        or isinstance(page_size, bool)
-        or page_size < 1
+        not isinstance(page_size, int) or isinstance(page_size, bool) or page_size < 1
     ):
         raise ValueError(
-            f"Invalid page_size {page_size!r}. Expected a positive integer or "
-            "False."
+            f"Invalid page_size {page_size!r}. Expected a positive integer or " "False."
         )
     if column_width not in ("auto", "content"):
         raise ValueError(
-            f"Invalid column_width {column_width!r}. Expected 'auto' or "
-            "'content'."
+            f"Invalid column_width {column_width!r}. Expected 'auto' or " "'content'."
         )
     if toolbar not in (True, False, "custom", "both"):
         raise ValueError(
-            f"Invalid toolbar {toolbar!r}. Expected True, False, 'custom' "
-            "or 'both'."
+            f"Invalid toolbar {toolbar!r}. Expected True, False, 'custom' " "or 'both'."
         )
     if toolbar_align not in ("left", "center", "right"):
         raise ValueError(
@@ -1445,9 +1482,7 @@ def smart_table(
         init_cell = stored if stored is not None else selected_cell
         default_selected = []
     else:
-        default_selected = (
-            list(stored) if stored is not None else list(selected or [])
-        )
+        default_selected = list(stored) if stored is not None else list(selected or [])
         init_cell = None
 
     data = json.dumps(
@@ -1836,161 +1871,104 @@ def persona(
 
 
 # ---------------------------------------------------------------------------
-# Card custom component (Custom Components v2)
+# Cart custom component (Custom Components v2)
 # ---------------------------------------------------------------------------
 
-_CARD_CSS = """
-.pcard {
-    border: 1px solid var(--st-border-color);
-    border-radius: var(--st-base-radius, 0.5rem);
-    padding: 1rem;
-    font-family: var(--st-font);
-    color: var(--st-text-color);
-    background: var(--st-background-color);
-    box-sizing: border-box;
-}
-.pcard .header {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-}
-.pcard .avatar {
-    width: 6rem;
-    height: 6rem;
-    border-radius: 0.5rem;
-    flex: 0 0 auto;
-    object-fit: cover;
-    display: flex;
+_CART_CSS = """
+.cart-widget {
+    position: relative;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 600;
-    background: var(--st-secondary-background-color);
+    width: 2.5rem;
+    height: 2.5rem;
+    color: var(--st-text-color);
 }
-.pcard .title { font-weight: 600; font-size: 1.25rem; line-height: 1.2; }
-.pcard .subtitle { font-size: 0.875rem; line-height: 1.2; }
-.pcard .status { font-size: 0.875rem; line-height: 1.2; opacity: 0.6; }
-.pcard .status.active {
-    opacity: 1;
-    color: var(--st-primary-color);
-    font-weight: 600;
+.cart-widget .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-size: 1.75rem;
+    font-weight: 400;
+    line-height: 1;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
-.pcard hr {
-    margin: 0.75rem 0;
-    border: none;
-    border-top: 1px solid var(--st-border-color);
+.cart-widget .cart-count {
+    position: absolute;
+    top: -0.1rem;
+    right: -0.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    background: var(--st-primary-color);
+    color: var(--st-primary-text-color, white);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
 }
 """
 
-_CARD_JS = r"""
+_CART_JS = r"""
 export default function(component) {
     const { data, parentElement } = component;
-    parentElement.querySelectorAll(".pcard").forEach((el) => el.remove());
+    parentElement.querySelectorAll(".cart-widget, link.cart-font")
+        .forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
-    const title = model.title || "";
-    const imageUrl = model.imageUrl || "";
-    const subtitle = model.subtitle || "";
-    const status = model.status || "";
-    const statusColor = model.statusColor || "inactive";
-
-    function initials(n) {
-        if (!n) return "?";
-        const parts = n.split(/\s+/).filter(Boolean);
-        if (!parts.length) return "?";
-        if (parts.length === 1) return parts[0][0].toUpperCase();
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-
     const root = document.createElement("div");
-    root.className = "pcard";
+    root.className = "cart-widget";
+    root.title = "Shopping cart";
 
-    const header = document.createElement("div");
-    header.className = "header";
+    const icon = document.createElement("span");
+    icon.className = "material-symbols-rounded";
+    icon.textContent = "shopping_cart";
+    root.appendChild(icon);
 
-    let avatar;
-    if (imageUrl) {
-        avatar = document.createElement("img");
-        avatar.src = imageUrl;
-        avatar.alt = title;
-    } else {
-        avatar = document.createElement("div");
-        avatar.textContent = initials(title);
-    }
-    avatar.className = "avatar";
-    header.appendChild(avatar);
+    const count = document.createElement("span");
+    count.className = "cart-count";
+    count.textContent = String(model.itemsNumber || 0);
+    root.appendChild(count);
 
-    const lines = document.createElement("div");
-    if (title) {
-        const el = document.createElement("div");
-        el.className = "title";
-        el.textContent = title;
-        lines.appendChild(el);
-    }
-    if (subtitle) {
-        const el = document.createElement("div");
-        el.className = "subtitle";
-        el.textContent = subtitle;
-        lines.appendChild(el);
-    }
-    if (status) {
-        const el = document.createElement("div");
-        el.className = "status " + (statusColor === "active" ? "active" : "");
-        el.textContent = status;
-        lines.appendChild(el);
-    }
-    header.appendChild(lines);
-    root.appendChild(header);
-
+    const fontLink = document.createElement("link");
+    fontLink.className = "cart-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
     parentElement.appendChild(root);
-    return () => { root.remove(); };
+
+    return () => {
+        root.remove();
+        fontLink.remove();
+    };
 }
 """
 
-_card_component = st.components.v2.component(
-    name="card",
-    css=_CARD_CSS,
-    js=_CARD_JS,
+_cart_component = st.components.v2.component(
+    name="cart",
+    css=_CART_CSS,
+    js=_CART_JS,
 )
 
 
-def card(
-    title: Optional[str] = None,
-    image_url: Optional[str] = None,
-    subtitle: Optional[str] = None,
-    status: Optional[str] = None,
+def cart(
+    items_number: Union[bool, int] = False,
     *,
-    status_color: Literal["active", "inactive"] = "inactive",
     key: Optional[str] = None,
-    width: Width = "stretch",
+    width: Width = "content",
 ) -> None:
-    """Render a card with an image and a title/subtitle/status header.
+    """Render a shopping-cart icon with the current item count."""
 
-    It can represent anything (a person, a product, a place, ...). Only the
-    fields that are provided are rendered.
-
-    Args:
-        title: Main heading of the card.
-        image_url: URL of the card's image. When omitted, the initials
-            derived from ``title`` are shown.
-        subtitle: Secondary line shown below the title.
-        status: Short status text (e.g. "In stock", "Online").
-        status_color: ``"active"`` (primary) or ``"inactive"`` (default).
-        key: Optional Streamlit widget key.
-        width: Width of the card.
-    """
-    if not title and not image_url and not subtitle and not status:
-        raise ValueError(
-            "At least one of 'title', 'image_url', 'subtitle' or 'status' "
-            "must be provided."
-        )
-    data = json.dumps(
-        {
-            "title": title,
-            "imageUrl": image_url,
-            "subtitle": subtitle,
-            "status": status,
-            "statusColor": status_color,
-        }
-    )
+    if (
+        not isinstance(items_number, int)
+        or isinstance(items_number, bool)
+        and items_number not in (False, True)
+        or items_number < 0
+    ):
+        raise ValueError("'items_number' must be a non-negative integer or False.")
+    count = int(items_number) if items_number else 0
+    data = json.dumps({"itemsNumber": count})
     with st.container(width=width):
-        _card_component(data=data, key=key)
+        _cart_component(data=data, key=key)
