@@ -214,6 +214,8 @@ class Box:
         contents: One or more callables rendered inside the box.
         key: Unique key used to scope the box styling. Use distinct keys when
             rendering multiple boxes on the same page.
+        bg_color: Background color of the box. ``None`` (default) uses the
+            standard Streamlit sidebar background color.
         width: Width of the box. ``"stretch"`` (default), ``"content"``, or a
             fixed pixel width.
         height: Height of the box. ``None`` (default) uses Streamlit's standard
@@ -230,6 +232,7 @@ class Box:
         self,
         *contents: Callable[[], None],
         key: str = "box",
+        bg_color: Optional[str] = None,
         width: Width = "stretch",
         height: Optional[Height] = None,
     ):
@@ -237,6 +240,7 @@ class Box:
             raise ValueError("At least one content callable must be provided.")
         self.__contents = contents
         self.__key = key
+        self.__bg_color = bg_color
         self.__width = width
         self.__height = height
         self.__render()
@@ -246,7 +250,8 @@ class Box:
         # color, then the secondary background (the sidebar's default), then
         # the CSS-variable fallback.
         background = (
-            st.get_option("theme.sidebar.backgroundColor")
+            self.__bg_color
+            or st.get_option("theme.sidebar.backgroundColor")
             or st.get_option("theme.secondaryBackgroundColor")
             or "var(--secondary-background-color, rgba(151, 166, 195, 0.25))"
         )
