@@ -1,9 +1,30 @@
+import inspect
 import json
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+import re
+from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
 
 import streamlit as st
 
 Width = Union[int, Literal["stretch", "content"]]
+Height = Union[int, Literal["stretch", "content"]]
+
+
+def _default_key(prefix: str) -> str:
+    """Build a fallback key from the caller's source location.
+
+    Components that need a stable, non-``None`` key (e.g. to target a
+    container via a ``st-key-*`` CSS class, or to namespace internal session
+    state) can't simply fall back to a fixed literal: every unkeyed call
+    would then produce the exact same key and collide. Deriving the default
+    from the immediate caller's file + line number keeps calls at different
+    call sites distinct while staying stable across reruns. Multiple calls
+    from the *same* line (e.g. inside a loop) still require an explicit
+    ``key``, matching normal Streamlit widget-key conventions.
+    """
+    caller = inspect.stack()[2]
+    return f"_stplus_{prefix}_{abs(hash((caller.filename, caller.lineno)))}"
+
+
 # Keep this Literal synchronized with every standard toolbar control. Any new
 # standard function must be added here so it can be passed to
 # ``standard_toolbar_exclude``.
@@ -2112,7 +2133,7 @@ _BREADCRUMBS_CSS = """
 
 _BREADCRUMBS_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(".bc").forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
@@ -2423,11 +2444,7 @@ _CART_CSS = """
     height: 2rem;
 }
 .cart-widget.medium {
-    scrollbar-width: thin;
     height: 2.5rem;
-.stbl-pager .page-menu-list::-webkit-scrollbar {
-    display: none;
-}
 }
 .cart-widget.large {
     width: 3rem;
@@ -2736,3 +2753,364 @@ def chat_message(
     data = json.dumps({"size": size, "count": count})
     with st.container(width=width):
         _chat_message_component(data=data, key=key)
+
+
+# ---------------------------------------------------------------------------
+# Clickable custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+
+_CLICKABLE_JS = r"""
+export default function(component) {
+    const { data, parentElement, setTriggerValue } = component;
+    const model = JSON.parse(data || "{}");
+    const containerClass = "st-key-" + (model.key || "clickable");
+    const container = parentElement.ownerDocument.querySelector(
+        "." + CSS.escape(containerClass)
+    );
+    const interactiveSelector = [
+        "a",
+        "button",
+        "input",
+        "textarea",
+        "select",
+        "option",
+        "[contenteditable='true']",
+        "[role='button']",
+        "[role='checkbox']",
+        "[role='radio']",
+        "[data-testid='stComponentV2']",
+    ].join(", ");
+    const onContainerClick = (event) => {
+        if (event.target.closest(interactiveSelector)) return;
+        setTriggerValue("clicked", Date.now());
+    };
+
+    if (container) {
+        container.addEventListener("click", onContainerClick);
+        container.style.cursor = "pointer";
+    }
+
+    return () => {
+        if (container) {
+            container.removeEventListener("click", onContainerClick);
+            container.style.cursor = "";
+        }
+    };
+}
+"""
+
+_clickable_component = st.components.v2.component(
+    name="clickable",
+    js=_CLICKABLE_JS,
+)
+
+
+class _ClickableContext:
+    def __init__(
+        self,
+        on_click: Optional[Callable[[], None]],
+        key: Optional[str],
+    ):
+        self._key = key
+        self._on_click = on_click
+        self._last_click_state_key = f"{self._key}_last_click"
+        self._container = None
+
+    def _on_clicked(self):
+        component_state = st.session_state.get(f"{self._key}_event", {})
+        click_value = component_state.get("clicked")
+        if click_value is not None and click_value != st.session_state.get(
+            self._last_click_state_key
+        ):
+            st.session_state[self._last_click_state_key] = click_value
+            if self._on_click is not None:
+                self._on_click()
+
+    def __enter__(self):
+        self._container = st.container(key=self._key)
+        self._container.__enter__()
+        _clickable_component(
+            data=json.dumps({"key": self._key}),
+            key=f"{self._key}_event",
+            on_clicked_change=self._on_clicked,
+        )
+        return self._container
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._container.__exit__(exc_type, exc_value, traceback)
+
+
+def clickable(
+    *,
+    on_click: Optional[Callable[[], None]] = None,
+    key: Optional[str] = None,
+) -> _ClickableContext:
+    """Render a clickable container for Streamlit content.
+
+    ``on_click`` is called once for each click on the container background.
+    Child controls and nested custom components retain their own click events.
+    """
+
+    return _ClickableContext(on_click, key or _default_key("clickable"))
+
+
+# ---------------------------------------------------------------------------
+# Tile custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+
+_TILE_CSS = """
+.tile-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.25rem 0.75rem;
+    align-items: start;
+    padding: 0.75rem 0.875rem 0.5rem;
+    color: var(--st-text-color);
+}
+.tile-heading { min-width: 0; }
+.tile-title {
+    overflow: hidden;
+    font-weight: 600;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tile-caption {
+    overflow: hidden;
+    margin-top: 0.2rem;
+    color: var(--st-text-color);
+    opacity: 0.7;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tile-icon {
+    color: var(--st-primary-color);
+    font-family: 'Material Symbols Rounded';
+    font-size: 1.5rem;
+    line-height: 1;
+}
+"""
+
+_TILE_JS = r"""
+export default function(component) {
+    const { data, parentElement, setTriggerValue } = component;
+    parentElement.querySelectorAll(".tile-header, link.tile-font")
+        .forEach((el) => el.remove());
+
+    const model = JSON.parse(data || "{}");
+    const header = document.createElement("div");
+    header.className = "tile-header";
+
+    const heading = document.createElement("div");
+    heading.className = "tile-heading";
+    const title = document.createElement("div");
+    title.className = "tile-title";
+    title.textContent = model.title || "";
+    heading.appendChild(title);
+    if (model.caption) {
+        const caption = document.createElement("div");
+        caption.className = "tile-caption";
+        caption.textContent = model.caption;
+        heading.appendChild(caption);
+    }
+    header.appendChild(heading);
+
+    const icon = document.createElement("span");
+    icon.className = "tile-icon";
+    const materialIcon = /^:material\/([a-z0-9_]+):$/.exec(model.icon || "");
+    if (materialIcon) {
+        icon.textContent = materialIcon[1];
+    } else {
+        icon.textContent = model.icon || "";
+    }
+    header.appendChild(icon);
+
+    const fontLink = document.createElement("link");
+    fontLink.className = "tile-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
+    parentElement.appendChild(header);
+
+    const tileKey = model.key || "tile";
+    const tileClass = "st-key-" + tileKey;
+    const tileContainer = parentElement.ownerDocument.querySelector(
+        "." + CSS.escape(tileClass)
+    );
+    const onTileClick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setTriggerValue("clicked", Date.now());
+    };
+    if (tileContainer) {
+        const originalBorderColor = tileContainer.style.borderColor;
+        const primaryColor = getComputedStyle(parentElement.host ?? parentElement)
+            .getPropertyValue("--st-primary-color")
+            .trim();
+        const onTileEnter = () => {
+            tileContainer.style.borderColor = primaryColor;
+        };
+        const onTileLeave = () => {
+            tileContainer.style.borderColor = originalBorderColor;
+        };
+        tileContainer.addEventListener("click", onTileClick, true);
+        tileContainer.addEventListener("mouseenter", onTileEnter);
+        tileContainer.addEventListener("mouseleave", onTileLeave);
+        tileContainer.style.cursor = "pointer";
+
+        return () => {
+            tileContainer.removeEventListener("click", onTileClick, true);
+            tileContainer.removeEventListener("mouseenter", onTileEnter);
+            tileContainer.removeEventListener("mouseleave", onTileLeave);
+            tileContainer.style.borderColor = originalBorderColor;
+            tileContainer.style.cursor = "";
+            header.remove();
+            fontLink.remove();
+        };
+    }
+
+    return () => {
+        header.remove();
+        fontLink.remove();
+    };
+}
+"""
+
+_tile_component = st.components.v2.component(
+    name="tile",
+    css=_TILE_CSS,
+    js=_TILE_JS,
+)
+
+
+class _TileContext:
+    def __init__(
+        self,
+        title: str,
+        caption: str,
+        icon: str,
+        width: Width,
+        height: Optional[Height],
+        border: bool,
+        bg_color: Optional[str],
+        scrollable: bool,
+        on_click: Optional[Callable[[], None]],
+        key: Optional[str],
+    ):
+        self._data = json.dumps(
+            {"title": title, "caption": caption, "icon": icon, "key": key or "tile"}
+        )
+        self._width = width
+        self._height = height
+        self._border = border
+        self._bg_color = bg_color
+        self._scrollable = scrollable
+        self._on_click = on_click
+        self._key = key
+        self._last_click_state_key = f"{key}_last_click"
+        self._container = None
+
+    def _on_clicked(self):
+        component_state = st.session_state.get(f"{self._key}_event", {})
+        click_value = component_state.get("clicked")
+        if click_value is not None and click_value != st.session_state.get(
+            self._last_click_state_key
+        ):
+            st.session_state[self._last_click_state_key] = click_value
+            if self._on_click is not None:
+                self._on_click()
+
+    def __enter__(self):
+        tile_styles = []
+        if self._bg_color is not None:
+            tile_styles.append(
+                f".st-key-{self._key} {{ background: {self._bg_color}; }}"
+            )
+        if not self._scrollable:
+            tile_styles.append(
+                f'.st-key-{self._key}[data-testid="stVerticalBlock"], '
+                f'.st-key-{self._key} [data-testid="stVerticalBlock"] '
+                "{ overflow-y: hidden !important; }"
+            )
+        if tile_styles:
+            st.markdown(
+                f"<style>{''.join(tile_styles)}</style>",
+                unsafe_allow_html=True,
+            )
+        container_args = {
+            "width": cast(Width, self._width),
+            "border": self._border,
+            "key": self._key,
+        }
+        if self._height is not None:
+            container_args["height"] = cast(Height, self._height)
+        self._container = st.container(**container_args)
+        self._container.__enter__()
+        _tile_component(
+            data=self._data,
+            key=f"{self._key}_event",
+            on_clicked_change=self._on_clicked,
+        )
+        return self._container
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._container.__exit__(exc_type, exc_value, traceback)
+
+
+def tile(
+    title: str,
+    caption: str = "",
+    icon: str = "",
+    *,
+    width: Width = "stretch",
+    height: Optional[Height] = None,
+    border: bool = False,
+    shape: Literal["square", "flexible"] = "flexible",
+    bg_color: Optional[str] = None,
+    scrollable: bool = True,
+    on_click: Optional[Callable[[], None]] = None,
+    key: Optional[str] = None,
+) -> _TileContext:
+    """Render a clickable tile and return a context for Streamlit content.
+
+    ``border`` is passed directly to the underlying Streamlit container.
+    ``shape="square"`` uses the numeric width as the height and ignores
+    ``height``; ``shape="flexible"`` uses the supplied height.
+    ``bg_color`` accepts hex or ``rgb(...)``/``rgba(...)`` colors.
+    Set ``scrollable=False`` to hide vertical overflow in a fixed-height tile.
+    ``on_click`` is called once for each tile click.
+    """
+
+    if not isinstance(border, bool):
+        raise ValueError("'border' must be a boolean.")
+    if not isinstance(scrollable, bool):
+        raise ValueError("'scrollable' must be a boolean.")
+    if bg_color is not None and not re.fullmatch(
+        r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"
+        r"|rgba?\(\s*(?:\d{1,3}%?\s*,\s*){2}"
+        r"\d{1,3}%?(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)",
+        bg_color,
+    ):
+        raise ValueError("'bg_color' must be a hex or rgb/rgba color.")
+    if shape not in ("square", "flexible"):
+        raise ValueError("'shape' must be 'square' or 'flexible'.")
+    if shape == "square":
+        if not isinstance(width, int) or isinstance(width, bool):
+            raise ValueError("'width' must be an integer when shape='square'.")
+        height = width
+    tile_key = key or _default_key("tile")
+    return _TileContext(
+        title,
+        caption,
+        icon,
+        width,
+        height,
+        border,
+        bg_color,
+        scrollable,
+        on_click,
+        tile_key,
+    )

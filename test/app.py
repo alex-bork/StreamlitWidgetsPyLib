@@ -9,7 +9,14 @@ from streamlit_plus import (
     persona,
     smart_table,
 )
-from streamlit_plus.custom_components import box, cart, chat_message, email
+from streamlit_plus.custom_components import (
+    box,
+    cart,
+    chat_message,
+    clickable,
+    email,
+    tile,
+)
 
 SPACE_HEIGHT = 50
 
@@ -19,11 +26,11 @@ with st.sidebar:
     type = st.selectbox(
         label="Component type",
         label_visibility="collapsed",
-        options=["Custom component", "Widgets"],
+        options=["Custom components", "Widgets"],
     )
 
 
-if type == "Custom component":
+if type == "Custom components":
     st.subheader("Icon components", anchor=False)
 
     with st.container(horizontal=True, horizontal_alignment="left"):
@@ -47,6 +54,49 @@ if type == "Custom component":
         size="medium",
         all_links_disabled=False,
     )
+
+    st.container(height=SPACE_HEIGHT, border=False)
+    st.subheader("Clickable", anchor=False)
+
+    with st.container(
+        horizontal=True, horizontal_alignment="left", border=True, width=200
+    ):
+        with clickable(
+            key="demo_clickable",
+            on_click=lambda: st.toast("Container clicked"),
+        ):
+            st.write("Click this container, or use its button.")
+            if st.button("Child action", key="demo_clickable_child_action"):
+                st.toast("Child action clicked")
+
+    # with st.container(
+    #     horizontal=True, horizontal_alignment="left", border=True, width=100
+    # ):
+    #     with clickable(
+    #         key="demo_clickable_2",
+    #         on_click=lambda: st.toast("Second container clicked"),
+    #     ):
+    #         email(size="medium", count=3, key="demo_clickable_email")
+
+    st.container(height=SPACE_HEIGHT, border=False)
+    st.subheader("Tile", anchor=False)
+
+    with tile(
+        title="Team activity",
+        caption="Latest updates",
+        icon=":material/insights:",
+        width=200,
+        height="content",
+        border=True,
+        shape="square",
+        # bg_color="rgb(245, 247, 250)",
+        key="demo_tile",
+        scrollable=False,
+        on_click=lambda: st.toast("Tile clicked"),
+    ):
+        # st.metric("Active users", 128, delta="12%")
+        st.write("This is regular Streamlit content inside the tile.")
+        # st.button("hi")
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Persona", anchor=False)

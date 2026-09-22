@@ -3,10 +3,12 @@ from streamlit_plus.custom_components import (
     breadcrumbs,
     cart,
     chat_message,
+    clickable,
     email,
     menu_tree,
     persona,
     smart_table,
+    tile,
 )
 from streamlit_plus.widgets import (
     Box,
@@ -23,9 +25,11 @@ __all__ = [
     "box",
     "cart",
     "chat_message",
+    "clickable",
     "Card",
     "email",
     "menu_tree",
     "persona",
     "smart_table",
+    "tile",
 ]
