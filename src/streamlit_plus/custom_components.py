@@ -1,6 +1,7 @@
 import inspect
 import json
 import re
+from datetime import date
 from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
 
 import streamlit as st
@@ -3152,3 +3153,413 @@ def tile(
         on_click,
         tile_key,
     )
+
+
+# ---------------------------------------------------------------------------
+# Calendar custom component (Custom Components v2)
+# ---------------------------------------------------------------------------
+#
+# A month calendar for picking a single day or a date range, shown as one
+# month or two consecutive months side by side.
+#
+# Data contract (passed as a JSON string via the ``data`` mount parameter):
+#   {
+#     "month": int,            # 1-12, the anchor month shown first
+#     "year": int,
+#     "selection": "single" | "range",
+#     "selected": [int, ...],  # date.toordinal() values, 0-2 entries
+#     "layout": "single" | "double",
+#     "today": int             # date.today().toordinal()
+#   }
+
+_CALENDAR_CSS = """
+.cal {
+    display: inline-block;
+    font-family: var(--st-font);
+    color: var(--st-text-color);
+}
+.cal.with-border {
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-base-radius, 0.5rem);
+    padding: 0.75rem;
+}
+.cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.cal-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--st-base-radius, 0.5rem);
+    cursor: pointer;
+    color: var(--st-text-color);
+    opacity: 0.7;
+}
+.cal-nav:hover { opacity: 1; background: var(--st-secondary-background-color); }
+.cal-nav .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-size: 1.125rem;
+}
+.cal-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-align: center;
+    flex: 1 1 auto;
+}
+.cal-months {
+    display: flex;
+    gap: 1.5rem;
+}
+.cal-month table {
+    border-collapse: collapse;
+}
+.cal-month caption {
+    font-weight: 600;
+    font-size: 0.8125rem;
+    padding-bottom: 0.375rem;
+    text-align: center;
+}
+.cal-month th {
+    font-weight: 400;
+    font-size: 0.75rem;
+    opacity: 0.6;
+    padding: 0.25rem 0.4rem;
+}
+.cal-month td {
+    padding: 0.1rem;
+    text-align: center;
+}
+.cal-day {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+.cal-day:hover { background: var(--st-secondary-background-color); }
+.cal-day.outside { opacity: 0.35; cursor: default; }
+.cal-day.outside:hover { background: none; }
+.cal-day.today { font-weight: 700; color: var(--st-primary-color); }
+.cal-day.selected {
+    background: var(--st-primary-color);
+    color: var(--st-background-color);
+    font-weight: 600;
+}
+.cal-day.in-range {
+    background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
+    border-radius: 0;
+}
+.cal-day.range-start { border-radius: 999px 0 0 999px; }
+.cal-day.range-end { border-radius: 0 999px 999px 0; }
+.cal-day.range-start.range-end { border-radius: 999px; }
+"""
+
+_CALENDAR_JS = r"""
+export default function(component) {
+    const { data, parentElement, setTriggerValue } = component;
+    parentElement.querySelectorAll(".cal, link.cal-font").forEach((el) => el.remove());
+
+    const model = JSON.parse(data || "{}");
+    const selectionMode = model.selection === "range" ? "range" : "single";
+    const layout = model.layout === "double" ? "double" : "single";
+    const today = model.today;
+
+    // The anchor month/year shown is kept local to the component so
+    // navigating with the prev/next arrows doesn't require a Python rerun.
+    // It's stored on the host element so it survives a re-mount (e.g. a
+    // light/dark theme switch, which does not rerun Python).
+    const stateEl = parentElement.host || parentElement;
+    const savedView = stateEl.dataset ? stateEl.dataset.calView : undefined;
+    let anchorMonth;
+    let anchorYear;
+    if (savedView !== undefined) {
+        const [m, y] = savedView.split("-").map(Number);
+        anchorMonth = m;
+        anchorYear = y;
+    } else {
+        anchorMonth = model.month;
+        anchorYear = model.year;
+    }
+
+    let selected = Array.isArray(model.selected) ? model.selected.slice() : [];
+
+    function saveView() {
+        if (stateEl.dataset) {
+            stateEl.dataset.calView = anchorMonth + "-" + anchorYear;
+        }
+    }
+    saveView();
+
+    // date.toordinal() counts from 0001-01-01 = day 1; that date is
+    // 719163 days before the JS/Unix epoch (1970-01-01).
+    function dateToOrdinal(utcDate) {
+        return Math.round(
+            (Date.UTC(
+                utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate()
+            ) - Date.UTC(1970, 0, 1)) / 86400000
+        ) + 719163;
+    }
+
+    function emit() {
+        const val = JSON.stringify(selected);
+        if (stateEl.dataset) stateEl.dataset.calSelected = val;
+        setTriggerValue("selected", val);
+    }
+
+    function onDayClick(ordinal) {
+        if (selectionMode === "single") {
+            selected = [ordinal];
+        } else if (selected.length !== 1) {
+            selected = [ordinal];
+        } else {
+            const start = selected[0];
+            selected = start <= ordinal ? [start, ordinal] : [ordinal, start];
+        }
+        emit();
+        render();
+    }
+
+    const root = document.createElement("div");
+    root.className = "cal" + (model.border !== false ? " with-border" : "");
+
+    const header = document.createElement("div");
+    header.className = "cal-header";
+
+    const prevBtn = document.createElement("span");
+    prevBtn.className = "cal-nav";
+    prevBtn.innerHTML =
+        '<span class="material-symbols-rounded">chevron_left</span>';
+    prevBtn.onclick = () => {
+        anchorMonth -= 1;
+        if (anchorMonth < 1) { anchorMonth = 12; anchorYear -= 1; }
+        saveView();
+        render();
+    };
+
+    const nextBtn = document.createElement("span");
+    nextBtn.className = "cal-nav";
+    nextBtn.innerHTML =
+        '<span class="material-symbols-rounded">chevron_right</span>';
+    nextBtn.onclick = () => {
+        anchorMonth += 1;
+        if (anchorMonth > 12) { anchorMonth = 1; anchorYear += 1; }
+        saveView();
+        render();
+    };
+
+    const title = document.createElement("div");
+    title.className = "cal-title";
+
+    header.appendChild(prevBtn);
+    header.appendChild(title);
+    header.appendChild(nextBtn);
+    root.appendChild(header);
+
+    const monthsWrap = document.createElement("div");
+    monthsWrap.className = "cal-months";
+    root.appendChild(monthsWrap);
+
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ];
+    const weekdayNames = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+    function buildMonth(month, year) {
+        const wrap = document.createElement("div");
+        wrap.className = "cal-month";
+        const table = document.createElement("table");
+        const caption = document.createElement("caption");
+        caption.textContent = monthNames[month - 1] + " " + year;
+        table.appendChild(caption);
+
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        weekdayNames.forEach((name) => {
+            const th = document.createElement("th");
+            th.textContent = name;
+            headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        const firstOfMonth = new Date(Date.UTC(year, month - 1, 1));
+        // Monday-first weekday index (0 = Monday ... 6 = Sunday).
+        const firstWeekday = (firstOfMonth.getUTCDay() + 6) % 7;
+        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+        const cells = [];
+        for (let i = 0; i < firstWeekday; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+
+        for (let row = 0; row < cells.length / 7; row++) {
+            const tr = document.createElement("tr");
+            for (let col = 0; col < 7; col++) {
+                const day = cells[row * 7 + col];
+                const td = document.createElement("td");
+                const span = document.createElement("span");
+                span.className = "cal-day";
+                if (day === null) {
+                    span.classList.add("outside");
+                } else {
+                    const ordinal = dateToOrdinal(
+                        new Date(Date.UTC(year, month - 1, day))
+                    );
+                    span.textContent = String(day);
+                    if (ordinal === today) span.classList.add("today");
+                    if (selectionMode === "range" && selected.length === 2) {
+                        const [start, end] = selected;
+                        if (ordinal > start && ordinal < end) {
+                            span.classList.add("in-range");
+                        }
+                        if (ordinal === start) {
+                            span.classList.add("selected", "range-start");
+                        }
+                        if (ordinal === end) {
+                            span.classList.add("selected", "range-end");
+                        }
+                    } else if (selected.includes(ordinal)) {
+                        span.classList.add("selected");
+                    }
+                    span.onclick = () => onDayClick(ordinal);
+                }
+                td.appendChild(span);
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        return wrap;
+    }
+
+    function render() {
+        if (layout === "double") {
+            let nextMonth = anchorMonth + 1;
+            let nextYear = anchorYear;
+            if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+            title.textContent = monthNames[anchorMonth - 1] + " " + anchorYear +
+                " \u2013 " + monthNames[nextMonth - 1] + " " + nextYear;
+            monthsWrap.textContent = "";
+            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
+            monthsWrap.appendChild(buildMonth(nextMonth, nextYear));
+        } else {
+            title.textContent = monthNames[anchorMonth - 1] + " " + anchorYear;
+            monthsWrap.textContent = "";
+            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
+        }
+    }
+    render();
+
+    const fontLink = document.createElement("link");
+    fontLink.className = "cal-font";
+    fontLink.rel = "stylesheet";
+    fontLink.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
+    parentElement.appendChild(fontLink);
+    parentElement.appendChild(root);
+
+    return () => {
+        root.remove();
+        fontLink.remove();
+    };
+}
+"""
+
+_calendar_component = st.components.v2.component(
+    name="calendar",
+    css=_CALENDAR_CSS,
+    js=_CALENDAR_JS,
+)
+
+
+def calender(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    *,
+    selection: Literal["single", "range"] = "single",
+    selected: Optional[List[int]] = None,
+    layout: Literal["single", "double"] = "single",
+    border: bool = True,
+    on_select: Optional[Callable[[List[int]], None]] = None,
+    key: Optional[str] = None,
+    width: Width = "content",
+) -> List[int]:
+    """Render a month calendar for picking a day or a date range.
+
+    Args:
+        month: Month (1-12) initially shown. Defaults to the current month.
+        year: Year initially shown. Defaults to the current year.
+        selection: ``"single"`` (default) picks one day; ``"range"`` picks a
+            start and end day: click a day to start a range, then another to
+            complete it; clicking again starts a new range.
+        selected: Initially selected day(s), as ``date.toordinal()`` values.
+            At most one entry for ``"single"``; zero, one (range start only)
+            or two (start, end) entries for ``"range"``.
+        layout: ``"single"`` (default) shows one month; ``"double"`` shows the
+            given month and the next one side by side. Navigating with the
+            prev/next arrows shifts both.
+        border: Whether to draw a border around the widget. Defaults to
+            ``True``.
+        on_select: Optional callback invoked with the current selection
+            (``date.toordinal()`` values) whenever it changes.
+        key: Optional Streamlit widget key.
+        width: Width of the widget. ``"content"`` (default), ``"stretch"``, or
+            a fixed pixel width.
+
+    Returns:
+        The selected day(s) as ``date.toordinal()`` values.
+    """
+    if selection not in ("single", "range"):
+        raise ValueError(
+            f"Invalid selection {selection!r}. Expected 'single' or 'range'."
+        )
+    if layout not in ("single", "double"):
+        raise ValueError(f"Invalid layout {layout!r}. Expected 'single' or 'double'.")
+    if not isinstance(border, bool):
+        raise ValueError("'border' must be a boolean.")
+    today = date.today()
+    month = month if month is not None else today.month
+    year = year if year is not None else today.year
+    if not 1 <= month <= 12:
+        raise ValueError("'month' must be between 1 and 12.")
+    selected = list(selected) if selected is not None else []
+    max_selected = 1 if selection == "single" else 2
+    if len(selected) > max_selected:
+        raise ValueError(
+            f"'selected' must have at most {max_selected} entr"
+            f"{'y' if max_selected == 1 else 'ies'} when selection={selection!r}."
+        )
+
+    data = json.dumps(
+        {
+            "month": month,
+            "year": year,
+            "selection": selection,
+            "selected": selected,
+            "layout": layout,
+            "border": border,
+            "today": today.toordinal(),
+        }
+    )
+    with st.container(width=width):
+        result = _calendar_component(
+            data=data,
+            on_selected_change=lambda: None,
+            key=key,
+        )
+    current = json.loads(result.selected) if result.selected is not None else selected
+    if on_select is not None:
+        on_select(current)
+    return current

@@ -1,6 +1,7 @@
 from streamlit_plus.custom_components import (
     box,
     breadcrumbs,
+    calender,
     cart,
     chat_message,
     clickable,
@@ -23,6 +24,7 @@ __all__ = [
     "Step",
     "breadcrumbs",
     "box",
+    "calender",
     "cart",
     "chat_message",
     "clickable",

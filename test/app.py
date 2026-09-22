@@ -4,6 +4,7 @@ from streamlit_plus import (
     FormWizard,
     Step,
     breadcrumbs,
+    calender,
     Card,
     menu_tree,
     persona,
@@ -135,6 +136,25 @@ if type == "Custom components":
 
     if selected:
         st.toast(f"Selected node: {selected}")
+
+    st.container(height=SPACE_HEIGHT, border=False)
+    st.subheader("Calendar", anchor=False)
+
+    cal_mode = st.radio(
+        "Calendar selection",
+        ["single", "range"],
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+
+    cal_selected = calender(
+        selection=cal_mode,
+        layout="double" if cal_mode == "range" else "single",
+        key="demo_calendar",
+    )
+
+    if cal_selected:
+        st.toast(f"Selected date(s): {cal_selected}")
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Smart Table", anchor=False)
