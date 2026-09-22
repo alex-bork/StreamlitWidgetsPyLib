@@ -34,7 +34,7 @@ if type == "Custom components":
     st.subheader("Icon components", anchor=False)
 
     with st.container(horizontal=True, horizontal_alignment="left"):
-        cart(size="medium", count=3)
+        cart(size="medium", count=3, on_click=lambda: st.toast("Cart clicked"))
 
         box(size="medium", count=3)
 

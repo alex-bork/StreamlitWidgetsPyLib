@@ -9,7 +9,7 @@ Width = Union[int, Literal["stretch", "content"]]
 Height = Union[int, Literal["stretch", "content"]]
 
 
-def _default_key(prefix: str) -> str:
+def _default_key(prefix: str, depth: int = 2) -> str:
     """Build a fallback key from the caller's source location.
 
     Components that need a stable, non-``None`` key (e.g. to target a
@@ -20,9 +20,41 @@ def _default_key(prefix: str) -> str:
     call sites distinct while staying stable across reruns. Multiple calls
     from the *same* line (e.g. inside a loop) still require an explicit
     ``key``, matching normal Streamlit widget-key conventions.
+
+    ``depth`` is the number of stack frames between this function and the
+    user's call site; increase it when calling through an extra helper.
     """
-    caller = inspect.stack()[2]
+
+    caller = inspect.stack()[depth]
     return f"_stplus_{prefix}_{abs(hash((caller.filename, caller.lineno)))}"
+
+
+def _wire_icon_click(
+    prefix: str, key: Optional[str], on_click: Optional[Callable[[], None]]
+):
+    """Resolve the widget key and click callback for a clickable icon badge.
+
+    Returns ``(key, None)`` unchanged when ``on_click`` isn't provided, since
+    the component then has no trigger to track. Otherwise, a stable event key
+    is derived (falling back to the caller's source location) and a
+    dedupe-and-forward callback is returned for ``on_clicked_change``.
+    """
+    if on_click is None:
+        return key, None
+    resolved_key = key or _default_key(prefix, depth=3)
+    last_click_state_key = f"{resolved_key}_last_click"
+    event_key = f"{resolved_key}_event"
+
+    def _on_clicked():
+        component_state = st.session_state.get(event_key, {})
+        click_value = component_state.get("clicked")
+        if click_value is not None and click_value != st.session_state.get(
+            last_click_state_key
+        ):
+            st.session_state[last_click_state_key] = click_value
+            on_click()
+
+    return event_key, _on_clicked
 
 
 # Keep this Literal synchronized with every standard toolbar control. Any new
@@ -2487,17 +2519,22 @@ _CART_CSS = """
     height: 1.25rem;
     font-size: 0.75rem;
 }
+.cart-widget.clickable { cursor: pointer; }
+.cart-widget.clickable:hover .material-symbols-rounded {
+    color: var(--st-primary-color);
+}
 """
 
 _CART_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(".cart-widget, link.cart-font")
         .forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
     const root = document.createElement("div");
-    root.className = "cart-widget " + (model.size || "medium");
+    root.className = "cart-widget " + (model.size || "medium") +
+        (model.clickable ? " clickable" : "");
     root.title = "Shopping cart";
 
     const icon = document.createElement("span");
@@ -2510,6 +2547,9 @@ export default function(component) {
     count.textContent = String(model.count || 0);
     root.appendChild(count);
 
+    const onClick = () => setTriggerValue("clicked", Date.now());
+    if (model.clickable) root.addEventListener("click", onClick);
+
     const fontLink = document.createElement("link");
     fontLink.className = "cart-font";
     fontLink.rel = "stylesheet";
@@ -2519,6 +2559,7 @@ export default function(component) {
     parentElement.appendChild(root);
 
     return () => {
+        root.removeEventListener("click", onClick);
         root.remove();
         fontLink.remove();
     };
@@ -2536,18 +2577,25 @@ def cart(
     size: Literal["small", "medium", "large"] = "medium",
     count: int = 0,
     *,
+    on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render a shopping-cart icon with an item-count badge."""
+    """Render a shopping-cart icon with an item-count badge.
+
+    ``on_click``, if provided, is called once per click on the icon; while
+    set, the icon also shows a pointer cursor and switches to the theme's
+    primary color on hover.
+    """
 
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count})
+    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
+    event_key, callback = _wire_icon_click("cart", key, on_click)
     with st.container(width=width):
-        _cart_component(data=data, key=key)
+        _cart_component(data=data, key=event_key, on_clicked_change=callback)
 
 
 # ---------------------------------------------------------------------------
@@ -2559,13 +2607,14 @@ _BOX_CSS = _BOX_CSS.replace(".cart-count", ".box-count")
 
 _BOX_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(".box-widget, link.box-font")
         .forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
     const root = document.createElement("div");
-    root.className = "box-widget " + (model.size || "medium");
+    root.className = "box-widget " + (model.size || "medium") +
+        (model.clickable ? " clickable" : "");
     root.title = "Box";
 
     const icon = document.createElement("span");
@@ -2578,6 +2627,9 @@ export default function(component) {
     count.textContent = String(model.count || 0);
     root.appendChild(count);
 
+    const onClick = () => setTriggerValue("clicked", Date.now());
+    if (model.clickable) root.addEventListener("click", onClick);
+
     const fontLink = document.createElement("link");
     fontLink.className = "box-font";
     fontLink.rel = "stylesheet";
@@ -2587,6 +2639,7 @@ export default function(component) {
     parentElement.appendChild(root);
 
     return () => {
+        root.removeEventListener("click", onClick);
         root.remove();
         fontLink.remove();
     };
@@ -2604,18 +2657,25 @@ def box(
     size: Literal["small", "medium", "large"] = "medium",
     count: int = 0,
     *,
+    on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render a box icon with a count badge."""
+    """Render a box icon with a count badge.
+
+    ``on_click``, if provided, is called once per click on the icon; while
+    set, the icon also shows a pointer cursor and switches to the theme's
+    primary color on hover.
+    """
 
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count})
+    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
+    event_key, callback = _wire_icon_click("box", key, on_click)
     with st.container(width=width):
-        _box_component(data=data, key=key)
+        _box_component(data=data, key=event_key, on_clicked_change=callback)
 
 
 # ---------------------------------------------------------------------------
@@ -2627,13 +2687,14 @@ _EMAIL_CSS = _EMAIL_CSS.replace(".cart-count", ".email-count")
 
 _EMAIL_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(".email-widget, link.email-font")
         .forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
     const root = document.createElement("div");
-    root.className = "email-widget " + (model.size || "medium");
+    root.className = "email-widget " + (model.size || "medium") +
+        (model.clickable ? " clickable" : "");
     root.title = "Email";
 
     const icon = document.createElement("span");
@@ -2646,6 +2707,9 @@ export default function(component) {
     count.textContent = String(model.count || 0);
     root.appendChild(count);
 
+    const onClick = () => setTriggerValue("clicked", Date.now());
+    if (model.clickable) root.addEventListener("click", onClick);
+
     const fontLink = document.createElement("link");
     fontLink.className = "email-font";
     fontLink.rel = "stylesheet";
@@ -2655,6 +2719,7 @@ export default function(component) {
     parentElement.appendChild(root);
 
     return () => {
+        root.removeEventListener("click", onClick);
         root.remove();
         fontLink.remove();
     };
@@ -2672,18 +2737,25 @@ def email(
     size: Literal["small", "medium", "large"] = "medium",
     count: int = 0,
     *,
+    on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render an email icon with an unread-count badge."""
+    """Render an email icon with an unread-count badge.
+
+    ``on_click``, if provided, is called once per click on the icon; while
+    set, the icon also shows a pointer cursor and switches to the theme's
+    primary color on hover.
+    """
 
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count})
+    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
+    event_key, callback = _wire_icon_click("email", key, on_click)
     with st.container(width=width):
-        _email_component(data=data, key=key)
+        _email_component(data=data, key=event_key, on_clicked_change=callback)
 
 
 # ---------------------------------------------------------------------------
@@ -2695,14 +2767,15 @@ _CHAT_MESSAGE_CSS = _CHAT_MESSAGE_CSS.replace(".cart-count", ".chat-message-coun
 
 _CHAT_MESSAGE_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(
         ".chat-message-widget, link.chat-message-font"
     ).forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
     const root = document.createElement("div");
-    root.className = "chat-message-widget " + (model.size || "medium");
+    root.className = "chat-message-widget " + (model.size || "medium") +
+        (model.clickable ? " clickable" : "");
     root.title = "Chat messages";
 
     const icon = document.createElement("span");
@@ -2715,6 +2788,9 @@ export default function(component) {
     count.textContent = String(model.count || 0);
     root.appendChild(count);
 
+    const onClick = () => setTriggerValue("clicked", Date.now());
+    if (model.clickable) root.addEventListener("click", onClick);
+
     const fontLink = document.createElement("link");
     fontLink.className = "chat-message-font";
     fontLink.rel = "stylesheet";
@@ -2724,6 +2800,7 @@ export default function(component) {
     parentElement.appendChild(root);
 
     return () => {
+        root.removeEventListener("click", onClick);
         root.remove();
         fontLink.remove();
     };
@@ -2741,18 +2818,25 @@ def chat_message(
     size: Literal["small", "medium", "large"] = "medium",
     count: int = 0,
     *,
+    on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render a chat-message icon with an unread-count badge."""
+    """Render a chat-message icon with an unread-count badge.
+
+    ``on_click``, if provided, is called once per click on the icon; while
+    set, the icon also shows a pointer cursor and switches to the theme's
+    primary color on hover.
+    """
 
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count})
+    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
+    event_key, callback = _wire_icon_click("chat_message", key, on_click)
     with st.container(width=width):
-        _chat_message_component(data=data, key=key)
+        _chat_message_component(data=data, key=event_key, on_clicked_change=callback)
 
 
 # ---------------------------------------------------------------------------
