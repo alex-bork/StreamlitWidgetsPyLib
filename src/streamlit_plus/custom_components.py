@@ -500,34 +500,13 @@ _SMART_TABLE_CSS = """
 .stbl td.cell-selectable.selected {
     background: var(--st-primary-color);
     color: var(--st-background-color);
+    border-color: white;
 }
-/* Outline the whole row of the selected cell with the primary color. */
-.stbl tr.row-selected td {
-    border-top: 1px solid var(--st-primary-color);
-    border-bottom: 1px solid var(--st-primary-color);
-}
-.stbl tr.row-selected td:first-child {
-    border-left: 1px solid var(--st-primary-color);
-}
-.stbl tr.row-selected td:last-child {
-    border-right: 1px solid var(--st-primary-color);
-}
-/* Outline the whole column (header included) with the primary color. */
-.stbl th.col-selected, .stbl td.col-selected {
-    border-left: 1px solid var(--st-primary-color);
-    border-right: 1px solid var(--st-primary-color);
-}
-.stbl thead th.col-selected {
-    border-top: 1px solid var(--st-primary-color);
-}
-.stbl tbody tr:last-child td.col-selected {
-    border-bottom: 1px solid var(--st-primary-color);
-}
-.stbl th.visible-column-last:not(.col-selected),
-.stbl td.visible-column-last:not(.col-selected) {
+.stbl th.visible-column-last, .stbl td.visible-column-last {
     border-right: none;
 }
-.stbl tbody tr.selected td.visible-column-last {
+.stbl tbody tr.selected td.visible-column-last,
+.stbl td.cell-selectable.selected.visible-column-last {
     border-right: 1px solid white;
 }
 .stbl input[type="checkbox"], .stbl input[type="radio"] {
@@ -941,18 +920,10 @@ export default function(component) {
         selected.clear();
         selectedCell = null;
         if (tbody) {
-            tbody.querySelectorAll(".selected, .row-selected, .col-selected")
-                .forEach((el) => {
-                    el.classList.remove(
-                        "selected", "row-selected", "col-selected"
-                    );
-                });
+            tbody.querySelectorAll(".selected")
+                .forEach((el) => el.classList.remove("selected"));
             tbody.querySelectorAll("input[type='checkbox'], input[type='radio']")
                 .forEach((el) => { el.checked = false; });
-        }
-        if (thead) {
-            thead.querySelectorAll(".col-selected")
-                .forEach((el) => el.classList.remove("col-selected"));
         }
         if (stateEl.dataset) {
             delete stateEl.dataset.stblSelected;
@@ -1156,9 +1127,6 @@ export default function(component) {
         th.dataset.col = String(colIndex);
         th.style.display = visibleColumns[colIndex] ? "" : "none";
         columnElements[colIndex].push(th);
-        if (cellMode && selectedCell && selectedCell[1] === colIndex) {
-            th.classList.add("col-selected");
-        }
         if (columnFilter) {
             const head = document.createElement("div");
             head.className = "th-head";
@@ -1440,26 +1408,12 @@ export default function(component) {
                     selectedCell[1] === i
                 ) {
                     td.classList.add("selected");
-                    tr.classList.add("row-selected");
-                }
-                if (selectedCell && selectedCell[1] === i) {
-                    td.classList.add("col-selected");
                 }
                 td.onclick = () => {
                     tbody
                         .querySelectorAll("td.cell-selectable.selected")
                         .forEach((el) => el.classList.remove("selected"));
-                    tbody
-                        .querySelectorAll("tr.row-selected")
-                        .forEach((el) => el.classList.remove("row-selected"));
-                    table
-                        .querySelectorAll(".col-selected")
-                        .forEach((el) => el.classList.remove("col-selected"));
                     td.classList.add("selected");
-                    tr.classList.add("row-selected");
-                    table
-                        .querySelectorAll('[data-col="' + i + '"]')
-                        .forEach((el) => el.classList.add("col-selected"));
                     selectedCell = [rowIndex, i];
                     emitCell();
                 };
