@@ -144,7 +144,7 @@ if type == "Custom components":
 
     cal_mode = st.radio(
         "Calendar selection",
-        ["single", "range"],
+        [None, "single", "range"],
         label_visibility="collapsed",
         horizontal=True,
     )
@@ -154,6 +154,7 @@ if type == "Custom components":
         status=[["23", "24"]],
         layout="double" if cal_mode == "range" else "single",
         key="demo_calendar",
+        navigation="arrow"
     )
 
     if cal_selected:

@@ -3181,6 +3181,7 @@ def tile(
 _CALENDAR_CSS = """
 .cal {
     display: inline-block;
+    position: relative;
     font-family: var(--st-font);
     color: var(--st-text-color);
 }
@@ -3209,6 +3210,7 @@ _CALENDAR_CSS = """
     color: var(--st-text-color);
     opacity: 0.7;
 }
+.cal-nav[hidden] { display: none; }
 .cal-nav-prev { left: 0; }
 .cal-nav-next { right: 0; }
 .cal-nav:hover { opacity: 1; background: var(--st-secondary-background-color); }
@@ -3216,11 +3218,29 @@ _CALENDAR_CSS = """
     font-family: 'Material Symbols Rounded';
     font-size: 1.125rem;
 }
+.cal-nav-field {
+    height: 1.75rem;
+    padding: 0 0.35rem;
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: var(--st-background-color);
+    color: var(--st-text-color);
+    font: inherit;
+}
+.cal-nav-field[hidden] { display: none; }
 .cal-title {
     width: 100%;
     font-weight: 600;
     font-size: 0.875rem;
     text-align: center;
+    cursor: pointer;
+}
+.cal-title:hover { color: var(--st-primary-color); }
+.cal-title.no-navigation {
+    cursor: default;
+}
+.cal-title.no-navigation:hover {
+    color: inherit;
 }
 .cal-title.double {
     display: flex;
@@ -3234,6 +3254,69 @@ _CALENDAR_CSS = """
     display: flex;
     gap: 1.5rem;
 }
+.cal-year-picker {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(3.5rem, 1fr));
+    gap: 0.25rem;
+}
+.cal-year-popover {
+    position: absolute;
+    z-index: 10;
+    top: 2.75rem;
+    left: 50%;
+    min-width: 15rem;
+    transform: translateX(-50%);
+    padding: 0.5rem;
+    border: 1px solid var(--st-border-color);
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: var(--st-background-color);
+    box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.12);
+}
+.cal-year-popover[hidden] { display: none; }
+.cal-year-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.35rem;
+}
+.cal-year-nav {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+.cal-year-nav button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: transparent;
+    color: var(--st-text-color);
+    cursor: pointer;
+}
+.cal-year-nav button:hover { background: var(--st-secondary-background-color); }
+.cal-year-nav .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-size: 1rem;
+}
+.cal-year {
+    min-height: 2rem;
+    border: 0;
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: transparent;
+    color: var(--st-text-color);
+    cursor: pointer;
+    font: inherit;
+}
+.cal-year:hover { background: var(--st-secondary-background-color); }
+.cal-year.current {
+    background: var(--st-primary-color);
+    color: var(--st-background-color);
+    font-weight: 600;
+}
+.cal-year.current:hover { background: var(--st-primary-color); }
 .cal-month table {
     border-collapse: collapse;
 }
@@ -3308,6 +3391,9 @@ export default function(component) {
     const selectionMode = model.selection === "range" ? "range"
         : model.selection === "single" ? "single"
         : null;
+    const navigation = model.navigation === "field" ? "field"
+        : model.navigation === "arrow" ? "arrow"
+        : null;
     const layout = model.layout === "double" ? "double" : "single";
     const today = model.today;
 
@@ -3330,6 +3416,10 @@ export default function(component) {
 
     let selected = Array.isArray(model.selected) ? model.selected.slice() : [];
     let hoverOrdinal = null;
+    let viewMode = "month";
+    let yearBlockStart = anchorYear;
+    let yearSelectionTarget = 0;
+    let yearSelectionYear = anchorYear;
 
     function saveView() {
         if (stateEl.dataset) {
@@ -3422,12 +3512,41 @@ export default function(component) {
         render();
     };
 
+    const monthField = document.createElement("input");
+    monthField.type = "month";
+    monthField.className = "cal-nav-field";
+    monthField.onchange = () => {
+        const [selectedYear, selectedMonth] = monthField.value.split("-").map(Number);
+        if (!selectedYear || !selectedMonth) return;
+        anchorYear = selectedYear;
+        anchorMonth = selectedMonth;
+        saveView();
+        render();
+    };
+
     const title = document.createElement("div");
     title.className = "cal-title";
+    title.onclick = (event) => {
+        if (!navigation) return;
+        if (layout === "double" && event.target.classList.contains("cal-title-month")) {
+            yearSelectionTarget = Array.from(title.children).indexOf(event.target);
+        } else {
+            yearSelectionTarget = 0;
+        }
+        viewMode = viewMode === "month" ? "year" : "month";
+        if (viewMode === "year") {
+            yearSelectionYear = yearSelectionTarget === 1 && anchorMonth === 12
+                ? anchorYear + 1
+                : anchorYear;
+            yearBlockStart = yearSelectionYear;
+        }
+        render();
+    };
 
     header.appendChild(prevBtn);
     header.appendChild(title);
     header.appendChild(nextBtn);
+    header.appendChild(monthField);
     root.appendChild(header);
 
     const monthsWrap = document.createElement("div");
@@ -3439,6 +3558,37 @@ export default function(component) {
         }
     };
     root.appendChild(monthsWrap);
+
+    const yearPopover = document.createElement("div");
+    yearPopover.className = "cal-year-popover";
+    const yearHeader = document.createElement("div");
+    yearHeader.className = "cal-year-header";
+    const yearNav = document.createElement("div");
+    yearNav.className = "cal-year-nav";
+    const yearPrevBtn = document.createElement("button");
+    yearPrevBtn.type = "button";
+    yearPrevBtn.innerHTML =
+        '<span class="material-symbols-rounded">chevron_left</span>';
+    yearPrevBtn.onclick = () => {
+        yearBlockStart -= 12;
+        render();
+    };
+    const yearNextBtn = document.createElement("button");
+    yearNextBtn.type = "button";
+    yearNextBtn.innerHTML =
+        '<span class="material-symbols-rounded">chevron_right</span>';
+    yearNextBtn.onclick = () => {
+        yearBlockStart += 12;
+        render();
+    };
+    yearNav.appendChild(yearPrevBtn);
+    yearNav.appendChild(yearNextBtn);
+    yearHeader.appendChild(yearNav);
+    const yearGrid = document.createElement("div");
+    yearGrid.className = "cal-year-picker";
+    yearPopover.appendChild(yearHeader);
+    yearPopover.appendChild(yearGrid);
+    root.appendChild(yearPopover);
 
     const monthNames = [
         "January", "February", "March", "April", "May", "June",
@@ -3555,6 +3705,33 @@ export default function(component) {
     }
 
     function render() {
+        prevBtn.hidden = navigation !== "arrow";
+        nextBtn.hidden = navigation !== "arrow";
+        monthField.hidden = navigation !== "field";
+        title.classList.toggle("no-navigation", !navigation);
+        monthField.value = String(anchorYear).padStart(4, "0") + "-" +
+            String(anchorMonth).padStart(2, "0");
+        yearPopover.hidden = !navigation || viewMode !== "year";
+        yearGrid.textContent = "";
+        if (viewMode === "year") {
+            for (let year = yearBlockStart; year <= yearBlockStart + 11; year++) {
+                const yearButton = document.createElement("button");
+                yearButton.type = "button";
+                yearButton.className = "cal-year";
+                if (year === yearSelectionYear) yearButton.classList.add("current");
+                yearButton.textContent = String(year);
+                yearButton.onclick = () => {
+                    anchorYear = yearSelectionTarget === 1 && layout === "double"
+                        && anchorMonth === 12
+                        ? year - 1
+                        : year;
+                    viewMode = "month";
+                    saveView();
+                    render();
+                };
+                yearGrid.appendChild(yearButton);
+            }
+        }
         title.textContent = "";
         if (layout === "double") {
             let nextMonth = anchorMonth + 1;
@@ -3578,6 +3755,16 @@ export default function(component) {
             monthsWrap.textContent = "";
             monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear, statusLists[0]));
         }
+        if (viewMode === "year" && root.isConnected) {
+            const titleTarget = layout === "double"
+                ? title.children[yearSelectionTarget]
+                : title;
+            const rootRect = root.getBoundingClientRect();
+            const targetRect = titleTarget.getBoundingClientRect();
+            yearPopover.style.left = String(
+                targetRect.left + targetRect.width / 2 - rootRect.left
+            ) + "px";
+        }
     }
     render();
 
@@ -3590,9 +3777,20 @@ export default function(component) {
     parentElement.appendChild(root);
 
     function onDocumentClick(event) {
-        const insideCalendar = event.composedPath
-            ? event.composedPath().includes(root)
+        const eventPath = event.composedPath ? event.composedPath() : [];
+        const insideCalendar = eventPath.length
+            ? eventPath.includes(root)
             : root.contains(event.target);
+        const insideYearPopover = eventPath.length
+            ? eventPath.includes(yearPopover)
+            : yearPopover.contains(event.target);
+        const insideTitle = eventPath.length
+            ? eventPath.includes(title)
+            : title.contains(event.target);
+        if (viewMode === "year" && !insideYearPopover && !insideTitle) {
+            viewMode = "month";
+            render();
+        }
         if (!selectionMode || insideCalendar) return;
         if (selected.length === 0) return;
         selected = [];
@@ -3623,6 +3821,7 @@ def calender(
     selection: Optional[Literal["single", "range"]] = None,
     selected: Optional[List[int]] = None,
     layout: Literal["single", "double"] = "single",
+    navigation: Optional[Literal["arrow", "field"]] = "arrow",
     status: Optional[List[List[str]]] = None,
     border: bool = True,
     on_click: Optional[Callable[[Union[str, List[str]]], None]] = None,
@@ -3647,6 +3846,9 @@ def calender(
         layout: ``"single"`` (default) shows one month; ``"double"`` shows the
             given month and the next one side by side. Navigating with the
             prev/next arrows shifts both.
+        navigation: ``"arrow"`` (default) shows month navigation arrows;
+            ``"field"`` shows a direct month field; ``None`` hides month
+            navigation controls.
         status: Day(s) to mark with a small primary-color dot below the day
             number, e.g. ``[["23", "15"]]``. One inner list per displayed
             month, in order: one list for ``layout="single"``, up to two
@@ -3679,6 +3881,10 @@ def calender(
         )
     if layout not in ("single", "double"):
         raise ValueError(f"Invalid layout {layout!r}. Expected 'single' or 'double'.")
+    if navigation is not None and navigation not in ("arrow", "field"):
+        raise ValueError(
+            f"Invalid navigation {navigation!r}. Expected 'arrow', 'field' or None."
+        )
     if not isinstance(border, bool):
         raise ValueError("'border' must be a boolean.")
     if on_click is not None and selection is None:
@@ -3721,6 +3927,7 @@ def calender(
             "selection": selection,
             "selected": selected,
             "layout": layout,
+            "navigation": navigation,
             "status": status,
             "border": border,
             "clickable": selection is not None,
