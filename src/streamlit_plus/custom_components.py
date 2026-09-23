@@ -3369,6 +3369,12 @@ export default function(component) {
     function dayLabel(ordinal) {
         return String(ordinalToDate(ordinal).getUTCDate());
     }
+    function isoDate(ordinal) {
+        const d = ordinalToDate(ordinal);
+        const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        return `${d.getUTCFullYear()}-${m}-${day}`;
+    }
 
     function emit() {
         const val = JSON.stringify(selected);
@@ -3382,7 +3388,7 @@ export default function(component) {
             emit();
             render();
             if (model.clickable) {
-                setTriggerValue("clicked", JSON.stringify(dayLabel(ordinal)));
+                setTriggerValue("clicked", JSON.stringify(isoDate(ordinal)));
             }
             return;
         }
@@ -3401,7 +3407,7 @@ export default function(component) {
         if (model.clickable) {
             const [rangeStart, rangeEnd] = selected;
             const days = [];
-            for (let o = rangeStart; o <= rangeEnd; o++) days.push(dayLabel(o));
+            for (let o = rangeStart; o <= rangeEnd; o++) days.push(isoDate(o));
             setTriggerValue("clicked", JSON.stringify(days));
         }
     }
@@ -3783,20 +3789,22 @@ def calender(
         on_click: Optional callback invoked when a day is clicked; requires
             ``selection`` to be set. While set, days also show a pointer
             cursor and a hover highlight. In ``"single"`` mode it's called on
-            every click with the clicked day number as a string (e.g.
-            ``"24"``). In ``"range"`` mode it's only called once the range is
-            completed (the second click), with every day number in the range
-            as a list (e.g. ``["24", "25", "26"]``).
+            every click with the clicked day as an ISO date string (e.g.
+            ``"2026-09-24"``). In ``"range"`` mode it's only called once the
+            range is completed (the second click), with every day in the
+            range as a list of ISO date strings (e.g.
+            ``["2026-09-24", "2026-09-25", "2026-09-26"]``).
         on_select: Optional callback invoked with the current selection as
-            day-number strings whenever it changes. For ``"range"``, this is
+            ISO date strings whenever it changes. For ``"range"``, this is
             called only after both endpoints have been selected.
         key: Optional Streamlit widget key.
         width: Width of the widget. ``"content"`` (default), ``"stretch"``, or
             a fixed pixel width.
 
     Returns:
-        The selected day(s) as day-number strings. A completed range contains
-        every day between its start and end, inclusively.
+        The selected day(s) as ISO date strings (``"YYYY-MM-DD"``). A
+        completed range contains every day between its start and end,
+        inclusively — unambiguous even when a range spans multiple months.
     """
 
     if selection is not None and selection not in ("single", "range"):
@@ -3871,11 +3879,11 @@ def calender(
     is_complete_range = selection != "range" or len(current_ordinals) == 2
     if selection == "range" and len(current_ordinals) == 2:
         start, end = sorted(current_ordinals)
-        current = [str(date.fromordinal(day).day) for day in range(start, end + 1)]
+        current = [date.fromordinal(day).isoformat() for day in range(start, end + 1)]
     elif selection == "range":
         current = []
     else:
-        current = [str(date.fromordinal(day).day) for day in current_ordinals]
+        current = [date.fromordinal(day).isoformat() for day in current_ordinals]
     if on_select is not None and is_complete_range:
         on_select(current)
     if on_click is not None and result.clicked is not None:
