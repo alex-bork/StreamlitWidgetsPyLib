@@ -3219,12 +3219,6 @@ _CALENDAR_CSS = """
 .cal-month table {
     border-collapse: collapse;
 }
-.cal-month caption {
-    font-weight: 600;
-    font-size: 0.8125rem;
-    padding-bottom: 0.375rem;
-    text-align: center;
-}
 .cal-month th {
     font-weight: 400;
     font-size: 0.75rem;
@@ -3378,9 +3372,6 @@ export default function(component) {
         const wrap = document.createElement("div");
         wrap.className = "cal-month";
         const table = document.createElement("table");
-        const caption = document.createElement("caption");
-        caption.textContent = monthNames[month - 1] + " " + year;
-        table.appendChild(caption);
 
         const thead = document.createElement("thead");
         const headRow = document.createElement("tr");
