@@ -760,7 +760,7 @@ _SMART_TABLE_CSS = """
 
 _SMART_TABLE_JS = r"""
 export default function(component) {
-    const { data, parentElement, setTriggerValue } = component;
+    const { data, parentElement, setStateValue, setTriggerValue } = component;
 
     // Remove anything this component appended on a previous mount so a
     // re-render (e.g. after a hot reload) does not stack duplicate tables.
@@ -818,7 +818,9 @@ export default function(component) {
             ? Math.floor(model.pageSize)
             : 0;
     const switchPage = model.switchPage || "number";
-    let currentPage = 0;
+    let currentPage = Number.isInteger(model.currentPage)
+        ? Math.max(0, model.currentPage)
+        : 0;
     // Standard controls are optional; custom controls automatically enable
     // the toolbar when at least one custom action is supplied.
     const showStandard = model.standardToolbar === true;
@@ -1409,6 +1411,7 @@ export default function(component) {
                         .querySelectorAll("td.cell-selectable.selected")
                         .forEach((el) => el.classList.remove("selected"));
                     td.classList.add("selected");
+                    setStateValue("page", currentPage);
                     selectedCell = [rowIndex, i];
                     emitCell();
                 };
@@ -1541,8 +1544,8 @@ export default function(component) {
                     closeMenu();
                     clearSelection(false);  // changing page drops the selection
                     currentPage = p;
-                    updatePageArrow();
                     applyFilters();
+                    setStateValue("page", currentPage);
                 };
                 menuList.appendChild(option);
             }
@@ -1560,28 +1563,25 @@ export default function(component) {
                 menu.appendChild(pageArrowUp);
             }
             const updatePageArrow = () => {
-                menu.classList.toggle(
-                    "last-page", currentPage >= totalPages - 1
-                );
+                const isLastPage = currentPage >= totalPages - 1;
+                menu.classList.toggle("last-page", isLastPage);
+                if (isLastPage) {
+                    menuList.scrollTop = menuList.scrollHeight;
+                }
                 if (pageArrow) {
-                    // A few px tolerance absorbs sub-pixel scrollTop values
-                    // from browser zoom/DPI scaling that would otherwise
-                    // never satisfy an exact "reached the bottom" check.
-                    pageArrow.style.display =
-                        currentPage < totalPages - 1 &&
+                    pageArrow.style.display = isLastPage ? "none" : (
                         menuList.scrollTop + menuList.clientHeight <
                             menuList.scrollHeight - 4
                             ? ""
-                            : "none";
+                            : "none"
+                    );
                 }
                 if (pageArrowUp) {
-                    pageArrowUp.style.display = menuList.scrollTop > 4
+                    pageArrowUp.style.display = isLastPage
                         ? ""
-                        : "none";
+                        : menuList.scrollTop > 4 ? "" : "none";
                 }
             };
-            menuList.addEventListener("scroll", updatePageArrow);
-            updatePageArrow();
             const positionMenu = () => {
                 if (menu.style.display === "none") return;
                 const rect = select.getBoundingClientRect();
@@ -1603,15 +1603,26 @@ export default function(component) {
                 if (!isOpen) {
                     menu.style.display = "block";
                     select.setAttribute("aria-expanded", "true");
+                    menuList.addEventListener("scroll", updatePageArrow);
                     const activeOption = menuList.querySelector(
                         ".page-option.active"
                     );
                     if (activeOption) {
-                        menuList.scrollTop = Math.max(
-                            0,
-                            activeOption.offsetTop -
-                                (menuList.clientHeight - activeOption.offsetHeight) / 2
-                        );
+                        if (currentPage >= totalPages - 1) {
+                            menuList.scrollTop = menuList.scrollHeight;
+                        } else {
+                            menuList.scrollTop = Math.max(
+                                0,
+                                activeOption.offsetTop -
+                                    (menuList.clientHeight - activeOption.offsetHeight) / 2
+                            );
+                        }
+                    }
+                    // A rerender can leave stale scroll state behind even when the
+                    // selected item is already on the final page, so always normalize
+                    // the menu to the bottom before showing it.
+                    if (currentPage >= totalPages - 1) {
+                        menuList.scrollTop = menuList.scrollHeight;
                     }
                     positionMenu();
                     updatePageArrow();
@@ -2007,6 +2018,11 @@ def smart_table(
             )
     custom_toolbar = custom_toolbar or []
 
+    component_state = st.session_state.get(key, {}) if key is not None else {}
+    current_page = getattr(component_state, "page", 0)
+    if not isinstance(current_page, int) or isinstance(current_page, bool):
+        current_page = 0
+
     # Persist the selection across re-mounts (e.g. a light/dark theme switch
     # re-mounts the component and would otherwise reset its visual state).
     state_key = f"_stbl_sel_{key}"
@@ -2032,6 +2048,7 @@ def smart_table(
             "sorting": sorting,
             "pageSize": page_size if page_size is not False else 0,
             "switchPage": switch_page,
+            "currentPage": current_page,
             "columnWidth": column_width,
             "coloredRows": colored_rows,
             "standardToolbar": standard_toolbar,
@@ -2045,6 +2062,7 @@ def smart_table(
         result = _smart_table_component(
             data=data,
             on_selection_change=lambda: None,
+            on_page_change=lambda: None,
             on_toolbarAction_change=lambda: None,
             key=key,
         )

@@ -114,7 +114,7 @@ if type == "Custom components":
             status="Offline",
             avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
             text_align="right",
-            size="small",
+            size="medium",
             image_shape="circle",
             status_color="active",
             icon_popover=on_icon_popover,
