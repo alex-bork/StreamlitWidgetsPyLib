@@ -11,11 +11,8 @@ from streamlit_plus import (
     smart_table,
 )
 from streamlit_plus.custom_components import (
-    box,
-    cart,
-    chat_message,
     clickable,
-    email,
+    icon,
     tile,
 )
 
@@ -35,17 +32,24 @@ if type == "Custom components":
     st.subheader("Icon components", anchor=False)
 
     with st.container(horizontal=True, horizontal_alignment="left"):
-        cart(size="medium", count=3, on_click=lambda: st.toast("Cart clicked"))
 
-        box(size="medium", count=3)
-
-        email(size="medium", count=3)
-
-        chat_message(size="medium", count=3)
+        icon(
+            material_name=":material/box:",
+            size="medium",
+            count=3,
+            on_click=lambda: st.toast("Icon clicked"),
+        )
+        icon(
+            label="Empty Box",
+            # label_visibility="collapsed",
+            material_name=":material/box:",
+            size="medium",
+            # count=3,
+            # on_click=lambda: st.toast("Icon clicked"),
+        )
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Breadcrumbs", anchor=False)
-
     breadcrumbs(
         [
             {"label": "Homepage", "page": "http://google.de"},
@@ -54,36 +58,28 @@ if type == "Custom components":
         ],
         size="medium",
         all_links_disabled=False,
+        # bg_color=None,
     )
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Clickable", anchor=False)
 
-    with st.container(
-        horizontal=True, horizontal_alignment="left", border=True, width=200
-    ):
+    with st.container(horizontal=True, horizontal_alignment="left", border=True):
         with clickable(
             key="demo_clickable",
+            width_inheritance="child",
             on_click=lambda: st.toast("Container clicked"),
         ):
             st.write("Click this container, or use its button.")
             if st.button("Child action", key="demo_clickable_child_action"):
                 st.toast("Child action clicked")
 
-    # with st.container(
-    #     horizontal=True, horizontal_alignment="left", border=True, width=100
-    # ):
-    #     with clickable(
-    #         key="demo_clickable_2",
-    #         on_click=lambda: st.toast("Second container clicked"),
-    #     ):
-    #         email(size="medium", count=3, key="demo_clickable_email")
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Tile", anchor=False)
 
     with tile(
-        title="Team activity",
+        title="Team activity and something and so on a lot of text",
         caption="Latest updates",
         icon=":material/insights:",
         width=200,
@@ -132,6 +128,7 @@ if type == "Custom components":
         key="demo_menu_tree",
         width=200,
         selected_node="backend",
+        spacing="small",
     )
 
     previous_menu_selection = st.session_state.get("demo_menu_selection")
@@ -154,7 +151,7 @@ if type == "Custom components":
         status=[["23", "24"]],
         layout="double" if cal_mode == "range" else "single",
         key="demo_calendar",
-        navigation="arrow"
+        navigation="arrow",
     )
 
     if cal_selected:

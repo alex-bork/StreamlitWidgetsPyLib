@@ -8,6 +8,7 @@ import streamlit as st
 
 Width = Union[int, Literal["stretch", "content"]]
 Height = Union[int, Literal["stretch", "content"]]
+LabelVisibility = Literal["visible", "hidden", "collapsed"]
 
 
 def _default_key(prefix: str, depth: int = 2) -> str:
@@ -28,34 +29,6 @@ def _default_key(prefix: str, depth: int = 2) -> str:
 
     caller = inspect.stack()[depth]
     return f"_stplus_{prefix}_{abs(hash((caller.filename, caller.lineno)))}"
-
-
-def _wire_icon_click(
-    prefix: str, key: Optional[str], on_click: Optional[Callable[[], None]]
-):
-    """Resolve the widget key and click callback for a clickable icon badge.
-
-    Returns ``(key, None)`` unchanged when ``on_click`` isn't provided, since
-    the component then has no trigger to track. Otherwise, a stable event key
-    is derived (falling back to the caller's source location) and a
-    dedupe-and-forward callback is returned for ``on_clicked_change``.
-    """
-    if on_click is None:
-        return key, None
-    resolved_key = key or _default_key(prefix, depth=3)
-    last_click_state_key = f"{resolved_key}_last_click"
-    event_key = f"{resolved_key}_event"
-
-    def _on_clicked():
-        component_state = st.session_state.get(event_key, {})
-        click_value = component_state.get("clicked")
-        if click_value is not None and click_value != st.session_state.get(
-            last_click_state_key
-        ):
-            st.session_state[last_click_state_key] = click_value
-            on_click()
-
-    return event_key, _on_clicked
 
 
 # Keep this Literal synchronized with every standard toolbar control. Any new
@@ -98,6 +71,9 @@ _MENU_TREE_CSS = """
     font-size: 0.875rem;
     user-select: none;
 }
+.tg-tree.spacing-small .tg-node { padding-top: 0.05rem; padding-bottom: 0.05rem; }
+.tg-tree.spacing-medium .tg-node { padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.tg-tree.spacing-large .tg-node { padding-top: 0.3rem; padding-bottom: 0.3rem; }
 .tg-node:hover { background: var(--st-background-color); }
 .tg-node.selected {
     background: transparent;
@@ -138,6 +114,9 @@ export default function(component) {
     const tree = model.tree || [];
     const expanded = model.expanded !== false;  // default: expanded
     const backgroundOn = model.backgroundOn === true;  // default: off
+    const spacing = ["small", "medium", "large"].includes(model.spacing)
+        ? model.spacing
+        : "medium";
     const selectedId = model.selectedNode || null;
 
     // Build the set of ancestor ids on the path to the selected node so we
@@ -157,7 +136,8 @@ export default function(component) {
     })(tree, []);
 
     const treeEl = document.createElement("div");
-    treeEl.className = "tg-tree" + (backgroundOn ? " with-background" : "");
+    treeEl.className = "tg-tree spacing-" + spacing +
+        (backgroundOn ? " with-background" : "");
 
     function renderNodes(nodes, container) {
         nodes.forEach((node) => {
@@ -260,6 +240,7 @@ def menu_tree(
     width: Width = "stretch",
     expanded: bool = False,
     background_on: bool = False,
+    spacing: Optional[Literal["small", "medium", "large"]] = "medium",
     selected_node: Optional[str] = None,
 ) -> Optional[str]:
     """Render a clickable, collapsible tree menu.
@@ -281,6 +262,8 @@ def menu_tree(
             current = []
         background_on: When ``True``, the tree is drawn with a background color
             and border. When ``False`` (default), neither is shown.
+        spacing: Vertical spacing between tree rows. ``"small"``, ``"medium"``
+            (default), ``"large"``, or ``None`` for the medium default.
         if on_select is not None and is_complete_range:
             is ``False``, only the hierarchy leading to this node is expanded.
 
@@ -288,11 +271,16 @@ def menu_tree(
         The id of the currently selected node, or ``None``.
     """
 
+    if spacing is not None and spacing not in ("small", "medium", "large"):
+        raise ValueError(
+            f"Invalid spacing {spacing!r}. Expected 'small', 'medium', 'large' or None."
+        )
     data = json.dumps(
         {
             "tree": tree,
             "expanded": expanded,
             "backgroundOn": background_on,
+            "spacing": spacing,
             "selectedNode": selected_node,
         }
     )
@@ -652,7 +640,7 @@ _SMART_TABLE_CSS = """
     height: 1.75rem;
     padding: 0.15rem 0.45rem;
     font: inherit;
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--st-text-color);
     text-align: center;
@@ -2113,7 +2101,11 @@ _BREADCRUMBS_CSS = """
     padding: 0.25rem 0.375rem;
 }
 .bc.small a, .bc.small span.bc-link { padding: 0.25rem 0.25rem; }
-.bc a:hover { background: var(--st-secondary-background-color); }
+.bc.hover-standard a:hover { background: var(--st-secondary-background-color); }
+.bc.hover-primary a:hover {
+    background: var(--st-primary-color);
+    color: var(--st-primary-text-color, white);
+}
 .bc .bc-sep {
     display: inline-flex;
     align-items: center;
@@ -2126,12 +2118,15 @@ _BREADCRUMBS_CSS = """
 
 _BREADCRUMBS_JS = r"""
 export default function(component) {
-    const { data, parentElement, setTriggerValue } = component;
+    const { data, parentElement } = component;
     parentElement.querySelectorAll(".bc").forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
     const items = model.items || [];
     const size = model.size || "small";
+    const bgColor = model.bgColor === "primary" || model.bgColor === "standard"
+        ? model.bgColor
+        : null;
     const separator = model.separator || "\u203a";
     const allDisabled = model.allDisabled === true;
 
@@ -2141,7 +2136,7 @@ export default function(component) {
     const sepNudge = size === "small" ? "0em" : "-0.05em";
 
     const root = document.createElement("div");
-    root.className = "bc " + size;
+    root.className = "bc " + size + (bgColor ? " hover-" + bgColor : "");
 
     items.forEach((item, i) => {
         const active = !allDisabled && item.page;
@@ -2189,6 +2184,7 @@ def breadcrumbs(
     size: Literal["small", "medium"] = "small",
     separator: str = "\u203a",
     all_links_disabled: bool = False,
+    bg_color: Optional[Literal["standard", "primary"]] = "standard",
     key: Optional[str] = None,
     width: Width = "stretch",
 ) -> None:
@@ -2201,17 +2197,24 @@ def breadcrumbs(
         size: Text size, ``"small"`` (default) or ``"medium"``.
         separator: Character or string shown between items. Defaults to ``"›"``.
         all_links_disabled: Disables navigation for every item.
+        bg_color: Background style, ``"standard"`` (default) or ``"primary"``.
         key: Optional Streamlit widget key.
         width: Width of the widget.
     """
+
     if size not in ("small", "medium"):
         raise ValueError(f"Invalid size {size!r}. Expected 'small' or 'medium'.")
+    if bg_color is not None and bg_color not in ("standard", "primary"):
+        raise ValueError(
+            f"Invalid bg_color {bg_color!r}. Expected 'standard' or 'primary'."
+        )
     data = json.dumps(
         {
             "items": items,
             "size": size,
             "separator": separator,
             "allDisabled": all_links_disabled,
+            "bgColor": bg_color,
         }
     )
     with st.container(width=width):
@@ -2419,11 +2422,11 @@ def persona(
 
 
 # ---------------------------------------------------------------------------
-# Cart custom component (Custom Components v2)
+# Icon custom component (Custom Components v2)
 # ---------------------------------------------------------------------------
 
-_CART_CSS = """
-.cart-widget {
+_ICON_CSS = """
+.stplus-icon {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -2431,29 +2434,28 @@ _CART_CSS = """
     width: 2.5rem;
     height: 2.5rem;
     color: var(--st-text-color);
-}
-.cart-widget.small {
-    width: 2rem;
-    height: 2rem;
-}
-.cart-widget.medium {
-    height: 2.5rem;
-}
-.cart-widget.large {
-    width: 3rem;
-    height: 3rem;
-}
-.cart-widget .material-symbols-rounded {
-    font-family: 'Material Symbols Rounded';
-    font-size: 1.75rem;
-    font-weight: 400;
     line-height: 1;
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
-.cart-widget.small .material-symbols-rounded { font-size: 1.4rem; }
-.cart-widget.medium .material-symbols-rounded { font-size: 1.75rem; }
-.cart-widget.large .material-symbols-rounded { font-size: 2.1rem; }
-.cart-widget .cart-count {
+.stplus-icon-wrapper {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+}
+.stplus-icon-label {
+    margin-top: -0.15rem;
+    color: var(--st-text-color);
+    font-size: 0.875rem;
+    line-height: 1.25;
+    text-align: center;
+}
+.stplus-icon-label.hidden { visibility: hidden; }
+.stplus-icon-label.collapsed { display: none; }
+.stplus-icon.clickable { cursor: pointer; }
+.stplus-icon.clickable:hover { color: var(--st-primary-color); }
+.stplus-icon.small { width: 2rem; height: 2rem; font-size: 1.4rem; }
+.stplus-icon.medium { font-size: 1.75rem; }
+.stplus-icon.large { width: 3rem; height: 3rem; font-size: 2.1rem; }
+.stplus-icon-count {
     position: absolute;
     top: -0.1rem;
     right: -0.1rem;
@@ -2468,336 +2470,151 @@ _CART_CSS = """
     color: var(--st-primary-text-color, white);
     font-size: 0.7rem;
     font-weight: 600;
+}
+.stplus-icon.small .stplus-icon-count { min-width: 0.95rem; height: 0.95rem; font-size: 0.625rem; }
+.stplus-icon.large .stplus-icon-count { min-width: 1.25rem; height: 1.25rem; font-size: 0.75rem; }
+.stplus-icon .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-size: inherit;
+    font-weight: 400;
     line-height: 1;
-}
-.cart-widget.small .cart-count {
-    min-width: 0.95rem;
-    height: 0.95rem;
-    font-size: 0.625rem;
-}
-.cart-widget.large .cart-count {
-    min-width: 1.25rem;
-    height: 1.25rem;
-    font-size: 0.75rem;
-}
-.cart-widget.clickable { cursor: pointer; }
-.cart-widget.clickable:hover .material-symbols-rounded {
-    color: var(--st-primary-color);
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 """
 
-_CART_JS = r"""
-export default function(component) {
-    const { data, parentElement, setTriggerValue } = component;
-    parentElement.querySelectorAll(".cart-widget, link.cart-font")
-        .forEach((el) => el.remove());
-
-    const model = JSON.parse(data || "{}");
-    const root = document.createElement("div");
-    root.className = "cart-widget " + (model.size || "medium") +
-        (model.clickable ? " clickable" : "");
-    root.title = "Shopping cart";
-
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-rounded";
-    icon.textContent = "shopping_cart";
-    root.appendChild(icon);
-
-    const count = document.createElement("span");
-    count.className = "cart-count";
-    count.textContent = String(model.count || 0);
-    root.appendChild(count);
-
-    const onClick = () => setTriggerValue("clicked", Date.now());
-    if (model.clickable) root.addEventListener("click", onClick);
-
-    const fontLink = document.createElement("link");
-    fontLink.className = "cart-font";
-    fontLink.rel = "stylesheet";
-    fontLink.href =
-        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
-    parentElement.appendChild(fontLink);
-    parentElement.appendChild(root);
-
-    return () => {
-        root.removeEventListener("click", onClick);
-        root.remove();
-        fontLink.remove();
-    };
-}
-"""
-
-_cart_component = st.components.v2.component(
-    name="cart",
-    css=_CART_CSS,
-    js=_CART_JS,
-)
-
-
-def cart(
-    size: Literal["small", "medium", "large"] = "medium",
-    count: int = 0,
-    *,
-    on_click: Optional[Callable[[], None]] = None,
-    key: Optional[str] = None,
-    width: Width = "content",
-) -> None:
-    """Render a shopping-cart icon with an item-count badge.
-
-    ``on_click``, if provided, is called once per click on the icon; while
-    set, the icon also shows a pointer cursor and switches to the theme's
-    primary color on hover.
-    """
-
-    if size not in ("small", "medium", "large"):
-        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
-    event_key, callback = _wire_icon_click("cart", key, on_click)
-    with st.container(width=width):
-        _cart_component(data=data, key=event_key, on_clicked_change=callback)
-
-
-# ---------------------------------------------------------------------------
-# Box custom component (Custom Components v2)
-# ---------------------------------------------------------------------------
-
-_BOX_CSS = _CART_CSS.replace(".cart-widget", ".box-widget")
-_BOX_CSS = _BOX_CSS.replace(".cart-count", ".box-count")
-
-_BOX_JS = r"""
-export default function(component) {
-    const { data, parentElement, setTriggerValue } = component;
-    parentElement.querySelectorAll(".box-widget, link.box-font")
-        .forEach((el) => el.remove());
-
-    const model = JSON.parse(data || "{}");
-    const root = document.createElement("div");
-    root.className = "box-widget " + (model.size || "medium") +
-        (model.clickable ? " clickable" : "");
-    root.title = "Box";
-
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-rounded";
-    icon.textContent = "inventory_2";
-    root.appendChild(icon);
-
-    const count = document.createElement("span");
-    count.className = "box-count";
-    count.textContent = String(model.count || 0);
-    root.appendChild(count);
-
-    const onClick = () => setTriggerValue("clicked", Date.now());
-    if (model.clickable) root.addEventListener("click", onClick);
-
-    const fontLink = document.createElement("link");
-    fontLink.className = "box-font";
-    fontLink.rel = "stylesheet";
-    fontLink.href =
-        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
-    parentElement.appendChild(fontLink);
-    parentElement.appendChild(root);
-
-    return () => {
-        root.removeEventListener("click", onClick);
-        root.remove();
-        fontLink.remove();
-    };
-}
-"""
-
-_box_component = st.components.v2.component(
-    name="box",
-    css=_BOX_CSS,
-    js=_BOX_JS,
-)
-
-
-def box(
-    size: Literal["small", "medium", "large"] = "medium",
-    count: int = 0,
-    *,
-    on_click: Optional[Callable[[], None]] = None,
-    key: Optional[str] = None,
-    width: Width = "content",
-) -> None:
-    """Render a box icon with a count badge.
-
-    ``on_click``, if provided, is called once per click on the icon; while
-    set, the icon also shows a pointer cursor and switches to the theme's
-    primary color on hover.
-    """
-
-    if size not in ("small", "medium", "large"):
-        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
-    event_key, callback = _wire_icon_click("box", key, on_click)
-    with st.container(width=width):
-        _box_component(data=data, key=event_key, on_clicked_change=callback)
-
-
-# ---------------------------------------------------------------------------
-# Email custom component (Custom Components v2)
-# ---------------------------------------------------------------------------
-
-_EMAIL_CSS = _CART_CSS.replace(".cart-widget", ".email-widget")
-_EMAIL_CSS = _EMAIL_CSS.replace(".cart-count", ".email-count")
-
-_EMAIL_JS = r"""
-export default function(component) {
-    const { data, parentElement, setTriggerValue } = component;
-    parentElement.querySelectorAll(".email-widget, link.email-font")
-        .forEach((el) => el.remove());
-
-    const model = JSON.parse(data || "{}");
-    const root = document.createElement("div");
-    root.className = "email-widget " + (model.size || "medium") +
-        (model.clickable ? " clickable" : "");
-    root.title = "Email";
-
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-rounded";
-    icon.textContent = "mail";
-    root.appendChild(icon);
-
-    const count = document.createElement("span");
-    count.className = "email-count";
-    count.textContent = String(model.count || 0);
-    root.appendChild(count);
-
-    const onClick = () => setTriggerValue("clicked", Date.now());
-    if (model.clickable) root.addEventListener("click", onClick);
-
-    const fontLink = document.createElement("link");
-    fontLink.className = "email-font";
-    fontLink.rel = "stylesheet";
-    fontLink.href =
-        "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
-    parentElement.appendChild(fontLink);
-    parentElement.appendChild(root);
-
-    return () => {
-        root.removeEventListener("click", onClick);
-        root.remove();
-        fontLink.remove();
-    };
-}
-"""
-
-_email_component = st.components.v2.component(
-    name="email",
-    css=_EMAIL_CSS,
-    js=_EMAIL_JS,
-)
-
-
-def email(
-    size: Literal["small", "medium", "large"] = "medium",
-    count: int = 0,
-    *,
-    on_click: Optional[Callable[[], None]] = None,
-    key: Optional[str] = None,
-    width: Width = "content",
-) -> None:
-    """Render an email icon with an unread-count badge.
-
-    ``on_click``, if provided, is called once per click on the icon; while
-    set, the icon also shows a pointer cursor and switches to the theme's
-    primary color on hover.
-    """
-
-    if size not in ("small", "medium", "large"):
-        raise ValueError("'size' must be 'small', 'medium' or 'large'.")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
-    event_key, callback = _wire_icon_click("email", key, on_click)
-    with st.container(width=width):
-        _email_component(data=data, key=event_key, on_clicked_change=callback)
-
-
-# ---------------------------------------------------------------------------
-# Chat message custom component (Custom Components v2)
-# ---------------------------------------------------------------------------
-
-_CHAT_MESSAGE_CSS = _CART_CSS.replace(".cart-widget", ".chat-message-widget")
-_CHAT_MESSAGE_CSS = _CHAT_MESSAGE_CSS.replace(".cart-count", ".chat-message-count")
-
-_CHAT_MESSAGE_JS = r"""
+_ICON_JS = r"""
 export default function(component) {
     const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(
-        ".chat-message-widget, link.chat-message-font"
-    ).forEach((el) => el.remove());
+        ".stplus-icon-wrapper, link.stplus-icon-font"
+    )
+        .forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
-    const root = document.createElement("div");
-    root.className = "chat-message-widget " + (model.size || "medium") +
+    const wrapper = document.createElement("span");
+    wrapper.className = "stplus-icon-wrapper";
+    let label = null;
+    if (model.labelVisibility === "hidden") {
+        label = document.createElement("span");
+        label.className = "stplus-icon-label hidden";
+        label.textContent = model.label || "";
+    } else if (model.labelVisibility === "visible" && model.label) {
+        label = document.createElement("span");
+        label.className = "stplus-icon-label";
+        label.textContent = model.label;
+    }
+    const root = document.createElement("span");
+    root.className = "stplus-icon " + (model.size || "medium") +
         (model.clickable ? " clickable" : "");
-    root.title = "Chat messages";
+    if (model.color) root.style.color = model.color;
+    root.title = model.label || model.materialName || "";
 
     const icon = document.createElement("span");
     icon.className = "material-symbols-rounded";
-    icon.textContent = "chat";
+    icon.textContent = model.materialName || "help";
     root.appendChild(icon);
-
-    const count = document.createElement("span");
-    count.className = "chat-message-count";
-    count.textContent = String(model.count || 0);
-    root.appendChild(count);
+    wrapper.appendChild(root);
+    if (label) wrapper.appendChild(label);
 
     const onClick = () => setTriggerValue("clicked", Date.now());
     if (model.clickable) root.addEventListener("click", onClick);
 
+    if (model.count > 0) {
+        const count = document.createElement("span");
+        count.className = "stplus-icon-count";
+        count.textContent = String(model.count);
+        root.appendChild(count);
+    }
+
     const fontLink = document.createElement("link");
-    fontLink.className = "chat-message-font";
+    fontLink.className = "stplus-icon-font";
     fontLink.rel = "stylesheet";
     fontLink.href =
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded";
     parentElement.appendChild(fontLink);
-    parentElement.appendChild(root);
+    parentElement.appendChild(wrapper);
 
     return () => {
         root.removeEventListener("click", onClick);
-        root.remove();
+        wrapper.remove();
         fontLink.remove();
     };
 }
 """
 
-_chat_message_component = st.components.v2.component(
-    name="chat_message",
-    css=_CHAT_MESSAGE_CSS,
-    js=_CHAT_MESSAGE_JS,
+_icon_component = st.components.v2.component(
+    name="icon",
+    css=_ICON_CSS,
+    js=_ICON_JS,
 )
 
 
-def chat_message(
+def icon(
+    material_name: str,
     size: Literal["small", "medium", "large"] = "medium",
-    count: int = 0,
     *,
+    count: int = 0,
     on_click: Optional[Callable[[], None]] = None,
+    color: Optional[str] = None,
+    label: str = "",
+    label_visibility: LabelVisibility = "visible",
     key: Optional[str] = None,
     width: Width = "content",
 ) -> None:
-    """Render a chat-message icon with an unread-count badge.
+    """Render a Material Symbols Rounded icon with an optional click callback."""
 
-    ``on_click``, if provided, is called once per click on the icon; while
-    set, the icon also shows a pointer cursor and switches to the theme's
-    primary color on hover.
-    """
-
+    if not isinstance(material_name, str) or not material_name.strip():
+        raise ValueError("'material_name' must be a non-empty string.")
+    if material_name.startswith(":material/") and material_name.endswith(":"):
+        material_name = material_name[len(":material/") : -1]
+    if not re.fullmatch(r"[a-z0-9_]+", material_name):
+        raise ValueError(
+            "'material_name' must be a Material Symbol name such as 'shopping_cart'."
+        )
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("'count' must be a non-negative integer.")
-    data = json.dumps({"size": size, "count": count, "clickable": on_click is not None})
-    event_key, callback = _wire_icon_click("chat_message", key, on_click)
-    with st.container(width=width):
-        _chat_message_component(data=data, key=event_key, on_clicked_change=callback)
+    if not isinstance(label, str):
+        raise ValueError("'label' must be a string.")
+    if label_visibility not in ("visible", "hidden", "collapsed"):
+        raise ValueError(
+            "'label_visibility' must be 'visible', 'hidden' or 'collapsed'."
+        )
+    data = json.dumps(
+        {
+            "materialName": material_name,
+            "size": size,
+            "count": count,
+            "clickable": on_click is not None,
+            "color": color,
+            "label": label,
+            "labelVisibility": label_visibility,
+        }
+    )
+    event_key = key
+    callback = None
+    if on_click is not None:
+        auto_key = _default_key("icon", depth=2)
+        key_suffix = re.sub(r"[^a-zA-Z0-9_]+", "_", label or material_name)
+        event_key = key or f"{auto_key}_{key_suffix}"
+        last_click_key = f"{event_key}_last_click"
+
+        def callback():
+            component_state = st.session_state.get(event_key, {})
+            click_value = component_state.get("clicked")
+            if click_value is not None and click_value != st.session_state.get(
+                last_click_key
+            ):
+                st.session_state[last_click_key] = click_value
+                on_click()
+
+    _icon_component(
+        data=data,
+        key=event_key,
+        width=width,
+        on_clicked_change=callback,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2851,13 +2668,16 @@ _clickable_component = st.components.v2.component(
 
 
 class _ClickableContext:
+
     def __init__(
         self,
         on_click: Optional[Callable[[], None]],
         key: Optional[str],
+        width_inheritance: Optional[Literal["parent", "child"]],
     ):
         self._key = key
         self._on_click = on_click
+        self._width_inheritance = width_inheritance
         self._last_click_state_key = f"{self._key}_last_click"
         self._container = None
 
@@ -2872,7 +2692,12 @@ class _ClickableContext:
                 self._on_click()
 
     def __enter__(self):
-        self._container = st.container(key=self._key)
+        if self._width_inheritance == "child":
+            self._container = st.container(key=self._key, width="content")
+        elif self._width_inheritance == "parent":
+            self._container = st.container(key=self._key, width="stretch")
+        else:
+            self._container = st.container(key=self._key)
         self._container.__enter__()
         _clickable_component(
             data=json.dumps({"key": self._key}),
@@ -2889,14 +2714,24 @@ def clickable(
     *,
     on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
+    width_inheritance: Optional[Literal["parent", "child"]] = "parent",
 ) -> _ClickableContext:
     """Render a clickable container for Streamlit content.
 
     ``on_click`` is called once for each click on the container background.
     Child controls and nested custom components retain their own click events.
+    ``width_inheritance`` controls the container width: ``"parent"`` (default)
+    stretches to the parent width, ``"child"`` sizes to its content, and
+    ``None`` leaves the native Streamlit default unchanged.
     """
 
-    return _ClickableContext(on_click, key or _default_key("clickable"))
+    if width_inheritance not in (None, "parent", "child"):
+        raise ValueError("'width_inheritance' must be 'parent', 'child' or None.")
+    return _ClickableContext(
+        on_click,
+        key or _default_key("clickable"),
+        width_inheritance,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2907,22 +2742,21 @@ _TILE_CSS = """
 .tile-header {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 0.25rem 0.75rem;
+    gap: 0.1rem 0.25rem;
     align-items: start;
-    padding: 0.75rem 0.875rem 0.5rem;
+    padding: 0.15rem 0.25rem 0.1rem;
     color: var(--st-text-color);
 }
 .tile-heading { min-width: 0; }
 .tile-title {
-    overflow: hidden;
     font-weight: 600;
     line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 .tile-caption {
     overflow: hidden;
-    margin-top: 0.2rem;
+    margin-top: 0.05rem;
     color: var(--st-text-color);
     opacity: 0.7;
     font-size: 0.8125rem;
