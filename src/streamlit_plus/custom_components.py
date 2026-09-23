@@ -265,23 +265,29 @@ def menu_tree(
     """Render a clickable, collapsible tree menu.
 
     Args:
-        tree: Nested node dicts, each ``{"id", "label", "icon"?, "children"?}``.
-            ``icon`` follows Streamlit's convention: either an emoji (e.g.
+            on_select: Optional callback invoked with the current selection as
+                day-number strings whenever it changes. For ``"range"``, this is
+                called only after both endpoints have been selected.
             ``"📁"``) or a Material symbol as ``":material/icon_name:"``.
         on_select: Optional callback invoked with the clicked node's id.
         key: Optional Streamlit widget key.
+        is_complete_range = selection != "range" or len(current_ordinals) == 2
+        if selection == "range" and len(current_ordinals) == 2:
         width: Width of the tree. ``"stretch"`` (default), ``"content"``, or a
             fixed pixel width.
         expanded: When ``True``, branches start expanded; when ``False``
             (default), they start collapsed.
+        elif selection == "range":
+            current = []
         background_on: When ``True``, the tree is drawn with a background color
             and border. When ``False`` (default), neither is shown.
-        selected_node: Optional node id selected by default. When ``expanded``
+        if on_select is not None and is_complete_range:
             is ``False``, only the hierarchy leading to this node is expanded.
 
     Returns:
         The id of the currently selected node, or ``None``.
     """
+
     data = json.dumps(
         {
             "tree": tree,
@@ -3242,6 +3248,7 @@ _CALENDAR_CSS = """
     text-align: center;
 }
 .cal-day {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3249,11 +3256,13 @@ _CALENDAR_CSS = """
     height: 2rem;
     border-radius: 999px;
     font-size: 0.8125rem;
-    cursor: pointer;
+    cursor: default;
 }
-.cal-day:hover { background: var(--st-secondary-background-color); }
+.cal.clickable-days .cal-day:not(.outside) { cursor: pointer; }
+.cal.clickable-days .cal-day:not(.outside):hover {
+    background: var(--st-secondary-background-color);
+}
 .cal-day.outside { opacity: 0.35; cursor: default; }
-.cal-day.outside:hover { background: none; }
 .cal-day.today { font-weight: 700; color: var(--st-primary-color); }
 .cal-day.selected {
     background: var(--st-primary-color);
@@ -3264,9 +3273,30 @@ _CALENDAR_CSS = """
     background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
     border-radius: 0;
 }
+.cal-day.preview-range {
+    background: var(--st-secondary-background-color);
+    color: inherit;
+    font-weight: inherit;
+}
+.cal.clickable-days .cal-day.preview-range:hover {
+    background: var(--st-secondary-background-color);
+}
 .cal-day.range-start { border-radius: 999px 0 0 999px; }
 .cal-day.range-end { border-radius: 0 999px 999px 0; }
 .cal-day.range-start.range-end { border-radius: 999px; }
+.cal-day-dot {
+    position: absolute;
+    bottom: 0.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0.25rem;
+    height: 0.25rem;
+    border-radius: 50%;
+    background: var(--st-primary-color);
+}
+.cal-day.selected .cal-day-dot {
+    background: var(--st-background-color);
+}
 """
 
 _CALENDAR_JS = r"""
@@ -3275,7 +3305,9 @@ export default function(component) {
     parentElement.querySelectorAll(".cal, link.cal-font").forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
-    const selectionMode = model.selection === "range" ? "range" : "single";
+    const selectionMode = model.selection === "range" ? "range"
+        : model.selection === "single" ? "single"
+        : null;
     const layout = model.layout === "double" ? "double" : "single";
     const today = model.today;
 
@@ -3297,6 +3329,7 @@ export default function(component) {
     }
 
     let selected = Array.isArray(model.selected) ? model.selected.slice() : [];
+    let hoverOrdinal = null;
 
     function saveView() {
         if (stateEl.dataset) {
@@ -3314,6 +3347,14 @@ export default function(component) {
             ) - Date.UTC(1970, 0, 1)) / 86400000
         ) + 719163;
     }
+    function ordinalToDate(ordinal) {
+        return new Date(
+            (ordinal - 719163) * 86400000 + Date.UTC(1970, 0, 1)
+        );
+    }
+    function dayLabel(ordinal) {
+        return String(ordinalToDate(ordinal).getUTCDate());
+    }
 
     function emit() {
         const val = JSON.stringify(selected);
@@ -3324,18 +3365,37 @@ export default function(component) {
     function onDayClick(ordinal) {
         if (selectionMode === "single") {
             selected = [ordinal];
-        } else if (selected.length !== 1) {
-            selected = [ordinal];
-        } else {
-            const start = selected[0];
-            selected = start <= ordinal ? [start, ordinal] : [ordinal, start];
+            emit();
+            render();
+            if (model.clickable) {
+                setTriggerValue("clicked", JSON.stringify(dayLabel(ordinal)));
+            }
+            return;
         }
+        if (selected.length !== 1) {
+            selected = [ordinal];
+            hoverOrdinal = null;
+            emit();
+            render();
+            return;
+        }
+        const start = selected[0];
+        selected = start <= ordinal ? [start, ordinal] : [ordinal, start];
+        hoverOrdinal = null;
         emit();
         render();
+        if (model.clickable) {
+            const [rangeStart, rangeEnd] = selected;
+            const days = [];
+            for (let o = rangeStart; o <= rangeEnd; o++) days.push(dayLabel(o));
+            setTriggerValue("clicked", JSON.stringify(days));
+        }
     }
 
     const root = document.createElement("div");
-    root.className = "cal" + (model.border !== false ? " with-border" : "");
+    root.className = "cal" +
+        (model.border !== false ? " with-border" : "") +
+        (model.clickable ? " clickable-days" : "");
 
     const header = document.createElement("div");
     header.className = "cal-header";
@@ -3372,6 +3432,12 @@ export default function(component) {
 
     const monthsWrap = document.createElement("div");
     monthsWrap.className = "cal-months";
+    monthsWrap.onmouseleave = () => {
+        if (hoverOrdinal !== null) {
+            hoverOrdinal = null;
+            render();
+        }
+    };
     root.appendChild(monthsWrap);
 
     const monthNames = [
@@ -3379,8 +3445,11 @@ export default function(component) {
         "July", "August", "September", "October", "November", "December",
     ];
     const weekdayNames = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    // One status list per displayed month (by position); missing entries
+    // mean that month has no status days.
+    const statusLists = Array.isArray(model.status) ? model.status : [];
 
-    function buildMonth(month, year) {
+    function buildMonth(month, year, statusDays) {
         const wrap = document.createElement("div");
         wrap.className = "cal-month";
         const table = document.createElement("table");
@@ -3432,10 +3501,48 @@ export default function(component) {
                         if (ordinal === end) {
                             span.classList.add("selected", "range-end");
                         }
+                    } else if (selectionMode === "range" && selected.length === 1) {
+                        const start = selected[0];
+                        if (hoverOrdinal !== null && hoverOrdinal !== start) {
+                            const rangeStart = Math.min(start, hoverOrdinal);
+                            const rangeEnd = Math.max(start, hoverOrdinal);
+                            if (ordinal > rangeStart && ordinal < rangeEnd) {
+                                span.classList.add("in-range");
+                            }
+                            if (ordinal === rangeStart) {
+                                span.classList.add(
+                                    ordinal === hoverOrdinal ? "preview-range" : "selected",
+                                    "range-start",
+                                );
+                            }
+                            if (ordinal === rangeEnd) {
+                                span.classList.add(
+                                    ordinal === hoverOrdinal ? "preview-range" : "selected",
+                                    "range-end",
+                                );
+                            }
+                        } else if (ordinal === start) {
+                            span.classList.add("selected");
+                        }
                     } else if (selected.includes(ordinal)) {
                         span.classList.add("selected");
                     }
-                    span.onclick = () => onDayClick(ordinal);
+                    if (statusDays && statusDays.includes(String(day))) {
+                        const dot = document.createElement("span");
+                        dot.className = "cal-day-dot";
+                        span.appendChild(dot);
+                    }
+                    if (selectionMode) {
+                        span.onclick = () => onDayClick(ordinal);
+                        if (selectionMode === "range" && selected.length === 1) {
+                            span.onmouseenter = () => {
+                                if (hoverOrdinal !== ordinal) {
+                                    hoverOrdinal = ordinal;
+                                    render();
+                                }
+                            };
+                        }
+                    }
                 }
                 td.appendChild(span);
                 tr.appendChild(td);
@@ -3463,13 +3570,13 @@ export default function(component) {
             title.appendChild(leftLabel);
             title.appendChild(rightLabel);
             monthsWrap.textContent = "";
-            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
-            monthsWrap.appendChild(buildMonth(nextMonth, nextYear));
+            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear, statusLists[0]));
+            monthsWrap.appendChild(buildMonth(nextMonth, nextYear, statusLists[1]));
         } else {
             title.classList.remove("double");
             title.textContent = monthNames[anchorMonth - 1] + " " + anchorYear;
             monthsWrap.textContent = "";
-            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
+            monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear, statusLists[0]));
         }
     }
     render();
@@ -3482,7 +3589,20 @@ export default function(component) {
     parentElement.appendChild(fontLink);
     parentElement.appendChild(root);
 
+    function onDocumentClick(event) {
+        const insideCalendar = event.composedPath
+            ? event.composedPath().includes(root)
+            : root.contains(event.target);
+        if (!selectionMode || insideCalendar) return;
+        if (selected.length === 0) return;
+        selected = [];
+        emit();
+        render();
+    }
+    document.addEventListener("click", onDocumentClick, true);
+
     return () => {
+        document.removeEventListener("click", onDocumentClick, true);
         root.remove();
         fontLink.remove();
     };
@@ -3500,59 +3620,99 @@ def calender(
     month: Optional[int] = None,
     year: Optional[int] = None,
     *,
-    selection: Literal["single", "range"] = "single",
+    selection: Optional[Literal["single", "range"]] = None,
     selected: Optional[List[int]] = None,
     layout: Literal["single", "double"] = "single",
+    status: Optional[List[List[str]]] = None,
     border: bool = True,
-    on_select: Optional[Callable[[List[int]], None]] = None,
+    on_click: Optional[Callable[[Union[str, List[str]]], None]] = None,
+    on_select: Optional[Callable[[List[str]], None]] = None,
     key: Optional[str] = None,
     width: Width = "content",
-) -> List[int]:
+) -> List[str]:
     """Render a month calendar for picking a day or a date range.
 
     Args:
         month: Month (1-12) initially shown. Defaults to the current month.
         year: Year initially shown. Defaults to the current year.
-        selection: ``"single"`` (default) picks one day; ``"range"`` picks a
-            start and end day: click a day to start a range, then another to
-            complete it; clicking again starts a new range.
+        selection: ``None`` (default) disables selection: days aren't
+            clickable and the calendar is display-only. ``"single"`` picks
+            one day; ``"range"`` picks a start and end day: click a day to
+            start a range, then another to complete it; clicking again
+            starts a new range.
         selected: Initially selected day(s), as ``date.toordinal()`` values.
             At most one entry for ``"single"``; zero, one (range start only)
-            or two (start, end) entries for ``"range"``.
+            or two (start, end) entries for ``"range"``. Must be empty when
+            ``selection`` is ``None``.
         layout: ``"single"`` (default) shows one month; ``"double"`` shows the
             given month and the next one side by side. Navigating with the
             prev/next arrows shifts both.
+        status: Day(s) to mark with a small primary-color dot below the day
+            number, e.g. ``[["23", "15"]]``. One inner list per displayed
+            month, in order: one list for ``layout="single"``, up to two
+            (first month, second month) for ``layout="double"``. Each inner
+            list holds the marked day numbers as strings.
         border: Whether to draw a border around the widget. Defaults to
             ``True``.
-        on_select: Optional callback invoked with the current selection
-            (``date.toordinal()`` values) whenever it changes.
+        on_click: Optional callback invoked when a day is clicked; requires
+            ``selection`` to be set. While set, days also show a pointer
+            cursor and a hover highlight. In ``"single"`` mode it's called on
+            every click with the clicked day number as a string (e.g.
+            ``"24"``). In ``"range"`` mode it's only called once the range is
+            completed (the second click), with every day number in the range
+            as a list (e.g. ``["24", "25", "26"]``).
+        on_select: Optional callback invoked with the current selection as
+            day-number strings whenever it changes. For ``"range"``, this is
+            called only after both endpoints have been selected.
         key: Optional Streamlit widget key.
         width: Width of the widget. ``"content"`` (default), ``"stretch"``, or
             a fixed pixel width.
 
     Returns:
-        The selected day(s) as ``date.toordinal()`` values.
+        The selected day(s) as day-number strings. A completed range contains
+        every day between its start and end, inclusively.
     """
-    if selection not in ("single", "range"):
+
+    if selection is not None and selection not in ("single", "range"):
         raise ValueError(
-            f"Invalid selection {selection!r}. Expected 'single' or 'range'."
+            f"Invalid selection {selection!r}. Expected 'single', 'range' or None."
         )
     if layout not in ("single", "double"):
         raise ValueError(f"Invalid layout {layout!r}. Expected 'single' or 'double'.")
     if not isinstance(border, bool):
         raise ValueError("'border' must be a boolean.")
+    if on_click is not None and selection is None:
+        raise ValueError("'on_click' requires 'selection' to be set.")
+    max_months = 1 if layout == "single" else 2
+    if status is not None:
+        if not isinstance(status, list) or len(status) > max_months:
+            raise ValueError(
+                f"'status' must be a list of at most {max_months} day-list"
+                f"{'s' if max_months > 1 else ''} when layout={layout!r}."
+            )
+        for day_list in status:
+            if not isinstance(day_list, list) or not all(
+                isinstance(day, str) for day in day_list
+            ):
+                raise ValueError(
+                    "'status' must be a list of lists of day-number strings."
+                )
     today = date.today()
     month = month if month is not None else today.month
     year = year if year is not None else today.year
     if not 1 <= month <= 12:
         raise ValueError("'month' must be between 1 and 12.")
     selected = list(selected) if selected is not None else []
-    max_selected = 1 if selection == "single" else 2
-    if len(selected) > max_selected:
-        raise ValueError(
-            f"'selected' must have at most {max_selected} entr"
-            f"{'y' if max_selected == 1 else 'ies'} when selection={selection!r}."
-        )
+    if selection is None:
+        if selected:
+            raise ValueError("'selected' must be empty when 'selection' is None.")
+    else:
+        max_selected = 1 if selection == "single" else 2
+        if len(selected) > max_selected:
+            raise ValueError(
+                f"'selected' must have at most {max_selected} entr"
+                f"{'y' if max_selected == 1 else 'ies'} when selection={selection!r}."
+            )
 
     data = json.dumps(
         {
@@ -3561,7 +3721,9 @@ def calender(
             "selection": selection,
             "selected": selected,
             "layout": layout,
+            "status": status,
             "border": border,
+            "clickable": selection is not None,
             "today": today.toordinal(),
         }
     )
@@ -3569,9 +3731,22 @@ def calender(
         result = _calendar_component(
             data=data,
             on_selected_change=lambda: None,
+            on_clicked_change=lambda: None,
             key=key,
         )
-    current = json.loads(result.selected) if result.selected is not None else selected
-    if on_select is not None:
+    current_ordinals = (
+        json.loads(result.selected) if result.selected is not None else selected
+    )
+    is_complete_range = selection != "range" or len(current_ordinals) == 2
+    if selection == "range" and len(current_ordinals) == 2:
+        start, end = sorted(current_ordinals)
+        current = [str(date.fromordinal(day).day) for day in range(start, end + 1)]
+    elif selection == "range":
+        current = []
+    else:
+        current = [str(date.fromordinal(day).day) for day in current_ordinals]
+    if on_select is not None and is_complete_range:
         on_select(current)
+    if on_click is not None and result.clicked is not None:
+        on_click(json.loads(result.clicked))
     return current

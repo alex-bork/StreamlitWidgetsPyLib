@@ -134,8 +134,10 @@ if type == "Custom components":
         selected_node="backend",
     )
 
-    if selected:
+    previous_menu_selection = st.session_state.get("demo_menu_selection")
+    if selected and selected != previous_menu_selection:
         st.toast(f"Selected node: {selected}")
+    st.session_state.demo_menu_selection = selected
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Calendar", anchor=False)
@@ -149,6 +151,7 @@ if type == "Custom components":
 
     cal_selected = calender(
         selection=cal_mode,
+        status=[["23", "24"]],
         layout="double" if cal_mode == "range" else "single",
         key="demo_calendar",
     )
