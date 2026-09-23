@@ -3184,13 +3184,15 @@ _CALENDAR_CSS = """
     padding: 0.75rem;
 }
 .cal-header {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
     margin-bottom: 0.5rem;
 }
 .cal-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3201,16 +3203,26 @@ _CALENDAR_CSS = """
     color: var(--st-text-color);
     opacity: 0.7;
 }
+.cal-nav-prev { left: 0; }
+.cal-nav-next { right: 0; }
 .cal-nav:hover { opacity: 1; background: var(--st-secondary-background-color); }
 .cal-nav .material-symbols-rounded {
     font-family: 'Material Symbols Rounded';
     font-size: 1.125rem;
 }
 .cal-title {
+    width: 100%;
     font-weight: 600;
     font-size: 0.875rem;
     text-align: center;
-    flex: 1 1 auto;
+}
+.cal-title.double {
+    display: flex;
+    gap: 1.5rem;
+}
+.cal-title-month {
+    flex: 1 1 0;
+    text-align: center;
 }
 .cal-months {
     display: flex;
@@ -3329,7 +3341,7 @@ export default function(component) {
     header.className = "cal-header";
 
     const prevBtn = document.createElement("span");
-    prevBtn.className = "cal-nav";
+    prevBtn.className = "cal-nav cal-nav-prev";
     prevBtn.innerHTML =
         '<span class="material-symbols-rounded">chevron_left</span>';
     prevBtn.onclick = () => {
@@ -3340,7 +3352,7 @@ export default function(component) {
     };
 
     const nextBtn = document.createElement("span");
-    nextBtn.className = "cal-nav";
+    nextBtn.className = "cal-nav cal-nav-next";
     nextBtn.innerHTML =
         '<span class="material-symbols-rounded">chevron_right</span>';
     nextBtn.onclick = () => {
@@ -3436,16 +3448,25 @@ export default function(component) {
     }
 
     function render() {
+        title.textContent = "";
         if (layout === "double") {
             let nextMonth = anchorMonth + 1;
             let nextYear = anchorYear;
             if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-            title.textContent = monthNames[anchorMonth - 1] + " " + anchorYear +
-                " \u2013 " + monthNames[nextMonth - 1] + " " + nextYear;
+            title.classList.add("double");
+            const leftLabel = document.createElement("span");
+            leftLabel.className = "cal-title-month";
+            leftLabel.textContent = monthNames[anchorMonth - 1] + " " + anchorYear;
+            const rightLabel = document.createElement("span");
+            rightLabel.className = "cal-title-month";
+            rightLabel.textContent = monthNames[nextMonth - 1] + " " + nextYear;
+            title.appendChild(leftLabel);
+            title.appendChild(rightLabel);
             monthsWrap.textContent = "";
             monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
             monthsWrap.appendChild(buildMonth(nextMonth, nextYear));
         } else {
+            title.classList.remove("double");
             title.textContent = monthNames[anchorMonth - 1] + " " + anchorYear;
             monthsWrap.textContent = "";
             monthsWrap.appendChild(buildMonth(anchorMonth, anchorYear));
