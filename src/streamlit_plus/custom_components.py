@@ -2245,6 +2245,14 @@ _PERSONA_CSS = """
     background: var(--st-secondary-background-color);
     color: var(--st-text-color);
 }
+.persona .avatar.actionable {
+    cursor: pointer;
+    transition: border-color 120ms ease;
+    border: 2px solid transparent;
+}
+.persona .avatar.actionable:hover {
+    border: 2px solid var(--st-primary-color);
+}
 .persona .lines { display: flex; flex-direction: column; gap: 0.125rem; }
 .persona .name { font-weight: 600; line-height: 1.2; }
 .persona .role { line-height: 1.2; }
@@ -2258,7 +2266,7 @@ _PERSONA_CSS = """
 
 _PERSONA_JS = r"""
 export default function(component) {
-    const { data, parentElement } = component;
+    const { data, parentElement, setTriggerValue } = component;
     parentElement.querySelectorAll(".persona").forEach((el) => el.remove());
 
     const model = JSON.parse(data || "{}");
@@ -2270,6 +2278,7 @@ export default function(component) {
     const statusColor = model.statusColor || "inactive";
     const size = model.size || "small";
     const shape = model.imageShape || "circle";
+    const actionable = model.actionable === true;
 
     const avatarSize =
         size === "small" ? "3rem" : size === "medium" ? "6rem" : "9rem";
@@ -2306,9 +2315,18 @@ export default function(component) {
         avatar.textContent = initials(name);
     }
     avatar.className = "avatar";
+    if (actionable) avatar.classList.add("actionable");
     avatar.style.width = avatarSize;
     avatar.style.height = avatarSize;
     avatar.style.borderRadius = radius;
+    if (actionable) {
+        avatar.onclick = () => {
+            const selector = ".st-key-" + CSS.escape(model.popoverKey) +
+                " [data-testid='stPopoverButton']";
+            const popoverTrigger = parentElement.ownerDocument.querySelector(selector);
+            if (popoverTrigger) popoverTrigger.click();
+        };
+    }
     root.appendChild(avatar);
 
     // Text lines.
@@ -2361,6 +2379,9 @@ def persona(
     status_color: Literal["active", "inactive"] = "inactive",
     size: Literal["small", "medium", "large"] = "small",
     image_shape: Literal["circle", "none"] = "circle",
+    icon_popover: Optional[Callable[[], None]] = None,
+    icon_popover_width: Optional[Width] = None,
+    icon_popover_position: Optional[Literal["left", "center", "right"]] = "center",
     key: Optional[str] = None,
     width: Width = "stretch",
 ) -> None:
@@ -2378,6 +2399,13 @@ def persona(
         status_color: ``"active"`` (primary) or ``"inactive"`` (default).
         size: ``"small"`` (default), ``"medium"`` or ``"large"``.
         image_shape: ``"circle"`` (default) or ``"none"``.
+        icon_popover: Optional function rendered inside a popover when the
+            avatar is clicked.
+        icon_popover_width: Optional popover width. Accepts an integer,
+            ``"stretch"`` or ``"content"``. Defaults to the native popover
+            width.
+        icon_popover_position: Popover alignment: ``"left"``, ``"center"``
+            (default), or ``"right"``. ``None`` keeps native positioning.
         key: Optional Streamlit widget key.
         width: Width of the widget.
     """
@@ -2405,6 +2433,17 @@ def persona(
         raise ValueError(
             f"Invalid image_shape {image_shape!r}. Expected 'circle' or " "'none'."
         )
+    if icon_popover_position is not None and icon_popover_position not in (
+        "left",
+        "center",
+        "right",
+    ):
+        raise ValueError(
+            "'icon_popover_position' must be 'left', 'center', 'right' or None."
+        )
+    component_key = key or _default_key("persona")
+    popover_key = f"{component_key}_popover"
+    popover_label = f"persona-popover-{component_key}"
     data = json.dumps(
         {
             "name": name,
@@ -2415,10 +2454,61 @@ def persona(
             "statusColor": status_color,
             "size": size,
             "imageShape": image_shape,
+            "actionable": icon_popover is not None,
+            "popoverKey": popover_key if icon_popover else None,
         }
     )
+    event_key = f"{component_key}_avatar_event"
+
     with st.container(width=width):
-        _persona_component(data=data, key=key)
+        _persona_component(
+            data=data,
+            key=event_key,
+        )
+        if icon_popover:
+            popover_alignment = {
+                "left": "flex-start",
+                "center": "center",
+                "right": "flex-end",
+            }.get(icon_popover_position, "flex-start")
+            st.markdown(
+                f"<style>.st-key-{popover_key} {{ height: 0 !important; "
+                "min-height: 0 !important; margin: 0 !important; "
+                "padding: 0 !important; overflow: hidden !important; "
+                "transform: translateY(-2rem); "
+                "display: flex !important; width: 100% !important; "
+                f"justify-content: {popover_alignment} !important; }} "
+                f".st-key-{popover_key} [data-testid='stPopoverButton'] "
+                "{ opacity: 0 !important; width: 0 !important; "
+                "height: 0 !important; min-height: 0 !important; "
+                "padding: 0 !important; border: 0 !important; "
+                "position: relative !important; pointer-events: none !important; "
+                "} "
+                f"[data-testid='stPopoverBody'][aria-label='{popover_label}'] "
+                "{ border: 1px solid rgba(128, 128, 128, 0.4) !important; "
+                "border-radius: var(--st-base-radius, 0.5rem) !important; }</style>",
+                unsafe_allow_html=True,
+            )
+            action_popover = st.popover(
+                popover_label,
+                key=popover_key,
+                **(
+                    {"width": icon_popover_width}
+                    if icon_popover_width is not None
+                    else {}
+                ),
+            )
+            st.markdown(
+                f"<style>.st-key-{popover_key} [data-testid='stPopoverButton'] "
+                "{ opacity: 0 !important; width: 0 !important; "
+                "height: 0 !important; min-height: 0 !important; "
+                "padding: 0 !important; border: 0 !important; "
+                "position: absolute !important; pointer-events: none !important; "
+                "}</style>",
+                unsafe_allow_html=True,
+            )
+            with action_popover:
+                icon_popover()
 
 
 # ---------------------------------------------------------------------------

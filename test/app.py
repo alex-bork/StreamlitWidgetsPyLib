@@ -74,7 +74,6 @@ if type == "Custom components":
             if st.button("Child action", key="demo_clickable_child_action"):
                 st.toast("Child action clicked")
 
-
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Tile", anchor=False)
 
@@ -98,16 +97,45 @@ if type == "Custom components":
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Persona", anchor=False)
 
-    persona(
-        name="Alex Bork",
-        role="Developer",
-        status="Offline",
-        avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
-        text_align="right",
-        size="small",
-        image_shape="circle",
-        status_color="active",
-    )
+    def on_icon_popover():
+        st.write("Icon action clicked")
+
+    with st.container(
+        horizontal=True,
+        horizontal_alignment="distribute",
+        border=True,
+        height=380,
+        # vertical_alignment="center",
+    ):
+        persona(
+            name="Alex Bork",
+            role="Developer",
+            status="Offline",
+            avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
+            text_align="right",
+            size="small",
+            image_shape="circle",
+            status_color="active",
+            icon_popover=on_icon_popover,
+            icon_popover_width=300,
+            icon_popover_position="right",
+            width="content",
+        )
+
+        persona(
+            name="Alex Bork",
+            role="Developer",
+            status="Offline",
+            avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
+            text_align="right",
+            size="small",
+            image_shape="circle",
+            status_color="active",
+            icon_popover=on_icon_popover,
+            icon_popover_width=200,
+            icon_popover_position="center",
+            width="content",
+        )
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Menu Tree", anchor=False)
