@@ -83,6 +83,7 @@ if type == "Custom components":
         icon=":material/insights:",
         width=200,
         height="content",
+        icon_position="left",
         border=True,
         shape="square",
         # bg_color="rgb(245, 247, 250)",
@@ -176,10 +177,10 @@ if type == "Custom components":
 
     cal_selected = calender(
         selection=cal_mode,
-        status=[["23", "24"]],
+        active_days=[["23", "24"]],
         layout="double" if cal_mode == "range" else "single",
         key="demo_calendar",
-        navigation="arrow",
+        navigation=None if cal_mode is None else "arrow",
     )
 
     if cal_selected:

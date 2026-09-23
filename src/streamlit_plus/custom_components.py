@@ -1564,15 +1564,18 @@ export default function(component) {
                     "last-page", currentPage >= totalPages - 1
                 );
                 if (pageArrow) {
+                    // A few px tolerance absorbs sub-pixel scrollTop values
+                    // from browser zoom/DPI scaling that would otherwise
+                    // never satisfy an exact "reached the bottom" check.
                     pageArrow.style.display =
                         currentPage < totalPages - 1 &&
                         menuList.scrollTop + menuList.clientHeight <
-                            menuList.scrollHeight - 1
+                            menuList.scrollHeight - 4
                             ? ""
                             : "none";
                 }
                 if (pageArrowUp) {
-                    pageArrowUp.style.display = menuList.scrollTop > 0
+                    pageArrowUp.style.display = menuList.scrollTop > 4
                         ? ""
                         : "none";
                 }
@@ -2830,14 +2833,26 @@ def clickable(
 
 _TILE_CSS = """
 .tile-header {
-    display: grid;
-    grid-template-columns: 1fr auto;
+    display: flex;
+    flex-direction: column;
     gap: 0.1rem 0.25rem;
-    align-items: start;
+    align-items: stretch;
     padding: 0.15rem 0.25rem 0.1rem;
     color: var(--st-text-color);
 }
-.tile-heading { min-width: 0; }
+.tile-header-left .tile-icon {
+    align-self: flex-start;
+}
+.tile-header-center .tile-icon {
+    align-self: center;
+}
+.tile-header-right .tile-icon {
+    align-self: flex-end;
+}
+.tile-heading {
+    min-width: 0;
+    width: 100%;
+}
 .tile-title {
     font-weight: 600;
     line-height: 1.25;
@@ -2859,6 +2874,7 @@ _TILE_CSS = """
     font-family: 'Material Symbols Rounded';
     font-size: 1.5rem;
     line-height: 1;
+    margin-bottom: 0.15rem;
 }
 """
 
@@ -2870,7 +2886,9 @@ export default function(component) {
 
     const model = JSON.parse(data || "{}");
     const header = document.createElement("div");
-    header.className = "tile-header";
+    const iconPosition = (model.icon_position || "right").toLowerCase();
+    const normalizedPosition = iconPosition === "top" ? "center" : iconPosition;
+    header.className = `tile-header tile-header-${normalizedPosition}`;
 
     const heading = document.createElement("div");
     heading.className = "tile-heading";
@@ -2884,17 +2902,19 @@ export default function(component) {
         caption.textContent = model.caption;
         heading.appendChild(caption);
     }
-    header.appendChild(heading);
 
-    const icon = document.createElement("span");
-    icon.className = "tile-icon";
-    const materialIcon = /^:material\/([a-z0-9_]+):$/.exec(model.icon || "");
-    if (materialIcon) {
-        icon.textContent = materialIcon[1];
-    } else {
-        icon.textContent = model.icon || "";
+    if (model.icon) {
+        const icon = document.createElement("span");
+        icon.className = "tile-icon";
+        const materialIcon = /^:material\/([a-z0-9_]+):$/.exec(model.icon || "");
+        if (materialIcon) {
+            icon.textContent = materialIcon[1];
+        } else {
+            icon.textContent = model.icon || "";
+        }
+        header.appendChild(icon);
     }
-    header.appendChild(icon);
+    header.appendChild(heading);
 
     const fontLink = document.createElement("link");
     fontLink.className = "tile-font";
@@ -2915,14 +2935,17 @@ export default function(component) {
         setTriggerValue("clicked", Date.now());
     };
     if (tileContainer) {
-        const originalBorderColor = tileContainer.style.borderColor;
-        const primaryColor = getComputedStyle(parentElement.host ?? parentElement)
-            .getPropertyValue("--st-primary-color")
-            .trim();
+        const originalBorderColor = tileContainer.style.borderColor || getComputedStyle(tileContainer).borderColor;
+        const originalBackgroundColor = getComputedStyle(tileContainer).backgroundColor;
+        const secondaryBackgroundColor = getComputedStyle(parentElement.host ?? parentElement)
+            .getPropertyValue("--secondary-background-color")
+            .trim() || "#f0f2f6";
         const onTileEnter = () => {
-            tileContainer.style.borderColor = primaryColor;
+            tileContainer.style.backgroundColor = secondaryBackgroundColor;
+            tileContainer.style.borderColor = originalBorderColor;
         };
         const onTileLeave = () => {
+            tileContainer.style.backgroundColor = originalBackgroundColor;
             tileContainer.style.borderColor = originalBorderColor;
         };
         tileContainer.addEventListener("click", onTileClick, true);
@@ -2934,6 +2957,7 @@ export default function(component) {
             tileContainer.removeEventListener("click", onTileClick, true);
             tileContainer.removeEventListener("mouseenter", onTileEnter);
             tileContainer.removeEventListener("mouseleave", onTileLeave);
+            tileContainer.style.backgroundColor = originalBackgroundColor;
             tileContainer.style.borderColor = originalBorderColor;
             tileContainer.style.cursor = "";
             header.remove();
@@ -2956,11 +2980,13 @@ _tile_component = st.components.v2.component(
 
 
 class _TileContext:
+
     def __init__(
         self,
         title: str,
         caption: str,
-        icon: str,
+        icon: Optional[str],
+        icon_position: Literal["left", "center", "right", "top"],
         width: Width,
         height: Optional[Height],
         border: bool,
@@ -2970,7 +2996,13 @@ class _TileContext:
         key: Optional[str],
     ):
         self._data = json.dumps(
-            {"title": title, "caption": caption, "icon": icon, "key": key or "tile"}
+            {
+                "title": title,
+                "caption": caption,
+                "icon": icon,
+                "icon_position": "center" if icon_position == "top" else icon_position,
+                "key": key or "tile",
+            }
         )
         self._width = width
         self._height = height
@@ -3032,7 +3064,7 @@ class _TileContext:
 def tile(
     title: str,
     caption: str = "",
-    icon: str = "",
+    icon: Optional[str] = None,
     *,
     width: Width = "stretch",
     height: Optional[Height] = None,
@@ -3040,6 +3072,7 @@ def tile(
     shape: Literal["square", "flexible"] = "flexible",
     bg_color: Optional[str] = None,
     scrollable: bool = True,
+    icon_position: Literal["left", "center", "right", "top"] = "right",
     on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
 ) -> _TileContext:
@@ -3049,6 +3082,10 @@ def tile(
     ``shape="square"`` uses the numeric width as the height and ignores
     ``height``; ``shape="flexible"`` uses the supplied height.
     ``bg_color`` accepts hex or ``rgb(...)``/``rgba(...)`` colors.
+    ``icon`` is optional; if omitted, only the title/caption are shown.
+    ``icon_position`` controls the top-aligned horizontal placement of the
+    icon: ``"left"``, ``"center"``, or ``"right"``. ``"top"`` is accepted
+    as a backwards-compatible alias for ``"center"``.
     Set ``scrollable=False`` to hide vertical overflow in a fixed-height tile.
     ``on_click`` is called once for each tile click.
     """
@@ -3057,6 +3094,8 @@ def tile(
         raise ValueError("'border' must be a boolean.")
     if not isinstance(scrollable, bool):
         raise ValueError("'scrollable' must be a boolean.")
+    if icon_position not in ("left", "center", "right", "top"):
+        raise ValueError("'icon_position' must be 'left', 'center', 'right' or 'top'.")
     if bg_color is not None and not re.fullmatch(
         r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"
         r"|rgba?\(\s*(?:\d{1,3}%?\s*,\s*){2}"
@@ -3075,6 +3114,7 @@ def tile(
         title,
         caption,
         icon,
+        icon_position,
         width,
         height,
         border,
@@ -3119,6 +3159,10 @@ _CALENDAR_CSS = """
     display: flex;
     align-items: center;
     margin-bottom: 0.5rem;
+}
+.cal-header.no-navigation .cal-nav,
+.cal-header.no-navigation .cal-nav-field {
+    display: none !important;
 }
 .cal-nav {
     position: absolute;
@@ -3525,9 +3569,9 @@ export default function(component) {
         "July", "August", "September", "October", "November", "December",
     ];
     const weekdayNames = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-    // One status list per displayed month (by position); missing entries
-    // mean that month has no status days.
-    const statusLists = Array.isArray(model.status) ? model.status : [];
+    // One active-day list per displayed month (by position); missing entries
+    // mean that month has no active days.
+    const statusLists = Array.isArray(model.active_days) ? model.active_days : [];
 
     function buildMonth(month, year, statusDays) {
         const wrap = document.createElement("div");
@@ -3635,10 +3679,12 @@ export default function(component) {
     }
 
     function render() {
+        const hasNavigation = navigation === "arrow" || navigation === "field";
         prevBtn.hidden = navigation !== "arrow";
         nextBtn.hidden = navigation !== "arrow";
         monthField.hidden = navigation !== "field";
-        title.classList.toggle("no-navigation", !navigation);
+        header.classList.toggle("no-navigation", !hasNavigation);
+        title.classList.toggle("no-navigation", !hasNavigation);
         monthField.value = String(anchorYear).padStart(4, "0") + "-" +
             String(anchorMonth).padStart(2, "0");
         yearPopover.hidden = !navigation || viewMode !== "year";
@@ -3752,7 +3798,7 @@ def calender(
     selected: Optional[List[int]] = None,
     layout: Literal["single", "double"] = "single",
     navigation: Optional[Literal["arrow", "field"]] = "arrow",
-    status: Optional[List[List[str]]] = None,
+    active_days: Optional[List[List[str]]] = None,
     border: bool = True,
     on_click: Optional[Callable[[Union[str, List[str]]], None]] = None,
     on_select: Optional[Callable[[List[str]], None]] = None,
@@ -3779,11 +3825,11 @@ def calender(
         navigation: ``"arrow"`` (default) shows month navigation arrows;
             ``"field"`` shows a direct month field; ``None`` hides month
             navigation controls.
-        status: Day(s) to mark with a small primary-color dot below the day
-            number, e.g. ``[["23", "15"]]``. One inner list per displayed
+        active_days: Day(s) to mark with a small primary-color dot below the
+            day number, e.g. ``[["23", "15"]]``. One inner list per displayed
             month, in order: one list for ``layout="single"``, up to two
             (first month, second month) for ``layout="double"``. Each inner
-            list holds the marked day numbers as strings.
+            list holds the active day numbers as strings.
         border: Whether to draw a border around the widget. Defaults to
             ``True``.
         on_click: Optional callback invoked when a day is clicked; requires
@@ -3822,18 +3868,18 @@ def calender(
     if on_click is not None and selection is None:
         raise ValueError("'on_click' requires 'selection' to be set.")
     max_months = 1 if layout == "single" else 2
-    if status is not None:
-        if not isinstance(status, list) or len(status) > max_months:
+    if active_days is not None:
+        if not isinstance(active_days, list) or len(active_days) > max_months:
             raise ValueError(
-                f"'status' must be a list of at most {max_months} day-list"
+                f"'active_days' must be a list of at most {max_months} day-list"
                 f"{'s' if max_months > 1 else ''} when layout={layout!r}."
             )
-        for day_list in status:
+        for day_list in active_days:
             if not isinstance(day_list, list) or not all(
                 isinstance(day, str) for day in day_list
             ):
                 raise ValueError(
-                    "'status' must be a list of lists of day-number strings."
+                    "'active_days' must be a list of lists of day-number strings."
                 )
     today = date.today()
     month = month if month is not None else today.month
@@ -3860,7 +3906,7 @@ def calender(
             "selected": selected,
             "layout": layout,
             "navigation": navigation,
-            "status": status,
+            "active_days": active_days,
             "border": border,
             "clickable": selection is not None,
             "today": today.toordinal(),
