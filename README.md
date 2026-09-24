@@ -16,7 +16,6 @@ The library exposes two groups of building blocks.
 
 Higher-level constructs assembled from native Streamlit containers and theming:
 
-- **`Card`** — a bordered card with an optional image, title, subtitle, status line, and arbitrary content.
 - **`FormWizard`** / **`Step`** — a multi-step form wizard with a step indicator, per-step forms, back/next navigation, and finish handling. State persists across reruns via `st.session_state`.
 - **`Box`** — a rounded, themed container that wraps arbitrary Streamlit content.
 
@@ -56,16 +55,13 @@ uv pip install -e .
 
 ```python
 import streamlit as st
-from streamlit_plus import Card, Box, FormWizard, Step, table, tree, calendar, persona, breadcrumbs
+from streamlit_plus import Box, FormWizard, Step, table, tree, calendar, persona, breadcrumbs
 
-Card(
-    title="Jane Doe",
-    subtitle="Senior Developer",
-    status="Online",
-    status_color="active",
-    image_url="https://example.com/avatar.jpg",
-    content=lambda: st.write("This is the card content."),
-)
+def body():
+    st.markdown("**Quick summary**")
+    st.write("This content sits inside a themed, rounded box.")
+
+Box(body, width=300)
 ```
 
 A full demo covering every widget and component lives in [`test/app.py`](test/app.py). Run it with:

@@ -5,7 +5,6 @@ from streamlit_plus import (
     Step,
     breadcrumbs,
     calendar,
-    Card,
     persona,
     table,
     tree,
@@ -431,20 +430,6 @@ if type == "Custom components":
 
 
 else:  # "Widgets"
-    st.container(height=SPACE_HEIGHT, border=False)
-    st.subheader("Card", anchor=False)
-
-    Card(
-        title="Jordan Reyes",
-        subtitle="Senior Developer",
-        status="Online",
-        status_color="active",
-        image_url="https://randomuser.me/api/portraits/men/32.jpg",
-        width=300,
-        image_height=150,
-        content=lambda: st.write("This is the card content."),
-    )
-
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("FormWizard", anchor=False)
 

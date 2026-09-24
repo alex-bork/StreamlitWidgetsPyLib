@@ -10,7 +10,6 @@ from streamlit_plus.custom_components import (
 )
 from streamlit_plus.widgets import (
     Box,
-    Card,
     FormWizard,
     Step,
 )
@@ -22,7 +21,6 @@ __all__ = [
     "breadcrumbs",
     "calendar",
     "clickable",
-    "Card",
     "icon",
     "persona",
     "table",
