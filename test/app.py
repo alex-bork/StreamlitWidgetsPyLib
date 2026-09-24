@@ -139,7 +139,7 @@ if type == "Custom components":
         )
 
     st.container(height=SPACE_HEIGHT, border=False)
-    st.subheader("Menu Tree", anchor=False)
+    st.subheader("Tree", anchor=False)
 
     selected = tree(
         nodes=[
@@ -187,7 +187,7 @@ if type == "Custom components":
         st.toast(f"Selected date(s): {cal_selected}")
 
     st.container(height=SPACE_HEIGHT, border=False)
-    st.subheader("Smart Table", anchor=False)
+    st.subheader("Table", anchor=False)
 
     smart_table_section = st.container(gap=None)
     mode = smart_table_section.radio(
