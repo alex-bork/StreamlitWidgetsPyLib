@@ -3,10 +3,10 @@ from streamlit_plus.custom_components import (
     calendar,
     clickable,
     icon,
-    menu_tree,
     persona,
-    smart_table,
+    table,
     tile,
+    tree,
 )
 from streamlit_plus.widgets import (
     Box,
@@ -24,8 +24,8 @@ __all__ = [
     "clickable",
     "Card",
     "icon",
-    "menu_tree",
     "persona",
-    "smart_table",
+    "table",
     "tile",
+    "tree",
 ]

@@ -242,8 +242,8 @@ _menu_tree_component = st.components.v2.component(
 )
 
 
-def menu_tree(
-    tree: List[Dict[str, Any]],
+def tree(
+    nodes: List[Dict[str, Any]],
     *,
     on_select: Optional[Callable[[str], None]] = None,
     key: Optional[str] = None,
@@ -256,7 +256,7 @@ def menu_tree(
     """Render a clickable, collapsible tree menu.
 
     Args:
-        tree: Ordered list of node dicts. Each node is
+        nodes: Ordered list of node dicts. Each node is
             ``{"id": str, "label": str, "icon": str|None,
             "children": [ ...same shape... ]}``. ``icon`` may be an emoji
             (e.g. ``"📁"``) or a Material symbol as ``":material/icon_name:"``.
@@ -284,7 +284,7 @@ def menu_tree(
         )
     data = json.dumps(
         {
-            "tree": tree,
+            "tree": nodes,
             "expanded": expanded,
             "backgroundOn": background_on,
             "spacing": spacing,
@@ -1855,7 +1855,7 @@ def _excel_column_name(index: int) -> str:
     return label
 
 
-def smart_table(
+def table(
     columns: Optional[List[str]] = None,
     rows: Optional[List[List[Any]]] = None,
     *,

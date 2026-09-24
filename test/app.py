@@ -6,9 +6,9 @@ from streamlit_plus import (
     breadcrumbs,
     calendar,
     Card,
-    menu_tree,
     persona,
-    smart_table,
+    table,
+    tree,
 )
 from streamlit_plus.custom_components import (
     clickable,
@@ -141,8 +141,8 @@ if type == "Custom components":
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Menu Tree", anchor=False)
 
-    selected = menu_tree(
-        tree=[
+    selected = tree(
+        nodes=[
             {
                 "id": "backend",
                 "label": "Backend",
@@ -198,7 +198,7 @@ if type == "Custom components":
     )
 
     with smart_table_section:
-        selected_rows = smart_table(
+        selected_rows = table(
             columns=["Name", "Role", "Status", "Notes"],
             rows=[
                 [
