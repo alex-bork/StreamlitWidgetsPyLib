@@ -2258,10 +2258,19 @@ def breadcrumbs(
 # ---------------------------------------------------------------------------
 
 _PERSONA_CSS = """
+:host {
+    display: block;
+    align-self: flex-start;
+    height: fit-content !important;
+    min-height: 0 !important;
+}
 .persona {
     display: flex;
     align-items: center;
     gap: 0.625rem;
+    align-self: flex-start;
+    height: fit-content;
+    min-height: 0;
     font-family: var(--st-font);
     color: var(--st-text-color);
 }
@@ -2411,9 +2420,8 @@ def persona(
     status_color: Literal["active", "inactive"] = "inactive",
     size: Literal["small", "medium", "large"] = "small",
     image_shape: Literal["circle", "none"] = "circle",
-    icon_popover: Optional[Callable[[], None]] = None,
-    icon_popover_width: Optional[Width] = None,
-    icon_popover_position: Optional[Literal["left", "center", "right"]] = "center",
+    popover: Optional[Callable[[], None]] = None,
+    popover_width: Optional[Width] = None,
     key: Optional[str] = None,
     width: Width = "stretch",
 ) -> None:
@@ -2431,13 +2439,11 @@ def persona(
         status_color: ``"active"`` (primary) or ``"inactive"`` (default).
         size: ``"small"`` (default), ``"medium"`` or ``"large"``.
         image_shape: ``"circle"`` (default) or ``"none"``.
-        icon_popover: Optional function rendered inside a popover when the
+        popover: Optional function rendered inside a popover when the
             avatar is clicked.
-        icon_popover_width: Optional popover width. Accepts an integer,
+        popover_width: Optional popover width. Accepts an integer,
             ``"stretch"`` or ``"content"``. Defaults to the native popover
             width.
-        icon_popover_position: Popover alignment: ``"left"``, ``"center"``
-            (default), or ``"right"``. ``None`` keeps native positioning.
         key: Optional Streamlit widget key.
         width: Width of the widget.
     """
@@ -2465,14 +2471,6 @@ def persona(
         raise ValueError(
             f"Invalid image_shape {image_shape!r}. Expected 'circle' or " "'none'."
         )
-    if icon_popover_position is not None and icon_popover_position not in (
-        "left",
-        "center",
-        "right",
-    ):
-        raise ValueError(
-            "'icon_popover_position' must be 'left', 'center', 'right' or None."
-        )
     component_key = _validate_css_key(key) if key else _default_key("persona")
     popover_key = f"{component_key}_popover"
     popover_label = f"persona-popover-{component_key}"
@@ -2486,30 +2484,26 @@ def persona(
             "statusColor": status_color,
             "size": size,
             "imageShape": image_shape,
-            "actionable": icon_popover is not None,
-            "popoverKey": popover_key if icon_popover else None,
+            "actionable": popover is not None,
+            "popoverKey": popover_key if popover else None,
         }
     )
     event_key = f"{component_key}_avatar_event"
 
-    with st.container(width=width):
+    with st.container(width=width, key=component_key, gap=None):
         _persona_component(
             data=data,
             key=event_key,
         )
-        if icon_popover:
-            popover_alignment = {
-                "left": "flex-start",
-                "center": "center",
-                "right": "flex-end",
-            }.get(icon_popover_position, "flex-start")
+        if popover:
             st.markdown(
-                f"<style>.st-key-{popover_key} {{ height: 0 !important; "
+                f"<style>.st-key-{component_key} {{ min-height: 0 !important; "
+                "align-self: flex-start !important; } "
+                f".st-key-{popover_key} {{ height: 0 !important; "
                 "min-height: 0 !important; margin: 0 !important; "
                 "padding: 0 !important; overflow: hidden !important; "
                 "transform: translateY(-2rem); "
-                "display: flex !important; width: 100% !important; "
-                f"justify-content: {popover_alignment} !important; }} "
+                "display: flex !important; width: 100% !important; }} "
                 f".st-key-{popover_key} [data-testid='stPopoverButton'] "
                 "{ opacity: 0 !important; width: 0 !important; "
                 "height: 0 !important; min-height: 0 !important; "
@@ -2524,11 +2518,7 @@ def persona(
             action_popover = st.popover(
                 popover_label,
                 key=popover_key,
-                **(
-                    {"width": icon_popover_width}
-                    if icon_popover_width is not None
-                    else {}
-                ),
+                **({"width": popover_width} if popover_width is not None else {}),
             )
             st.markdown(
                 f"<style>.st-key-{popover_key} [data-testid='stPopoverButton'] "
@@ -2540,7 +2530,7 @@ def persona(
                 unsafe_allow_html=True,
             )
             with action_popover:
-                icon_popover()
+                popover()
 
 
 # ---------------------------------------------------------------------------

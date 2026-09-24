@@ -98,14 +98,15 @@ if type == "Custom components":
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Persona", anchor=False)
 
-    def on_icon_popover():
-        st.write("Icon action clicked")
+    def on_popover():
+        st.subheader("Popover Content")
+        st.write("This is the content inside the popover.")
 
     with st.container(
         horizontal=True,
         horizontal_alignment="distribute",
         border=True,
-        height=380,
+        # height=380,
         # vertical_alignment="center",
     ):
         persona(
@@ -117,9 +118,8 @@ if type == "Custom components":
             size="medium",
             image_shape="circle",
             status_color="active",
-            icon_popover=on_icon_popover,
-            icon_popover_width=300,
-            icon_popover_position="right",
+            popover=on_popover,
+            popover_width=300,
             width="content",
         )
 
@@ -132,9 +132,8 @@ if type == "Custom components":
             size="small",
             image_shape="circle",
             status_color="active",
-            icon_popover=on_icon_popover,
-            icon_popover_width=200,
-            icon_popover_position="center",
+            popover=on_popover,
+            popover_width=200,
             width="content",
         )
 
