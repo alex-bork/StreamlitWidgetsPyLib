@@ -1,6 +1,6 @@
 from streamlit_plus.custom_components import (
     breadcrumbs,
-    calender,
+    calendar,
     clickable,
     icon,
     menu_tree,
@@ -20,7 +20,7 @@ __all__ = [
     "FormWizard",
     "Step",
     "breadcrumbs",
-    "calender",
+    "calendar",
     "clickable",
     "Card",
     "icon",

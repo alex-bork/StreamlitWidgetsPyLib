@@ -4,7 +4,7 @@ from streamlit_plus import (
     FormWizard,
     Step,
     breadcrumbs,
-    calender,
+    calendar,
     Card,
     menu_tree,
     persona,
@@ -175,7 +175,7 @@ if type == "Custom components":
         horizontal=True,
     )
 
-    cal_selected = calender(
+    cal_selected = calendar(
         selection=cal_mode,
         active_days=[["23", "24"]],
         layout="double" if cal_mode == "range" else "single",

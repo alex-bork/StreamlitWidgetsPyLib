@@ -1,6 +1,6 @@
-import json
+import html
+import re
 
-from typing import List, Optional
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Union
 
@@ -8,6 +8,22 @@ import streamlit as st
 
 Width = Union[int, Literal["stretch", "content"]]
 Height = Union[int, Literal["stretch", "content"]]
+
+
+def _validate_css_key(key: str) -> str:
+    """Validate a key that gets interpolated into a raw ``<style>`` block.
+
+    The key becomes part of a ``.st-key-<key>`` CSS selector emitted via
+    ``unsafe_allow_html``. Restricting it to alphanumerics, underscores and
+    hyphens keeps callers from breaking out of the ``<style>`` context (a CSS
+    or HTML injection vector) and matches Streamlit's own key conventions.
+    """
+    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", key):
+        raise ValueError(
+            "'key' must be a non-empty string of letters, digits, underscores "
+            "or hyphens."
+        )
+    return key
 
 
 @dataclass
@@ -106,7 +122,8 @@ class FormWizard:
         with st.container(border=True, width=self.__width):
             if self.__name:
                 st.markdown(
-                    f'<h3 style="text-align: center; margin: 0;">{self.__name}</h3>',
+                    '<h3 style="text-align: center; margin: 0;">'
+                    f"{html.escape(self.__name)}</h3>",
                     unsafe_allow_html=True,
                 )
 
@@ -137,7 +154,7 @@ class FormWizard:
                         f'<span class="wizardStep" style="background: {background}; '
                         f"border-radius: 0.25rem; color: {color}; font-family: inherit; "
                         'font-size: 0.875rem; padding: 0.25rem 0.5rem;">'
-                        f"{label}</span>",
+                        f"{html.escape(label)}</span>",
                         unsafe_allow_html=True,
                     )
                     if i < len(self.__steps) - 1:
@@ -239,7 +256,7 @@ class Box:
         if not contents:
             raise ValueError("At least one content callable must be provided.")
         self.__contents = contents
-        self.__key = key
+        self.__key = _validate_css_key(key)
         self.__bg_color = bg_color
         self.__width = width
         self.__height = height
@@ -290,12 +307,17 @@ class Card:
     ) -> None:
         if image_height is not None and image_height < 1:
             raise ValueError("'image_height' must be a positive integer or None.")
+        if status_color not in ("active", "inactive"):
+            raise ValueError(
+                f"Invalid status_color {status_color!r}. Expected 'active' or "
+                "'inactive'."
+            )
         self.__title = title
         self.__image_url = image_url
         self.__subtitle = subtitle
         self.__status = status
         self.__status_color = status_color
-        self.__key = key or f"card_{id(self)}"
+        self.__key = _validate_css_key(key) if key else f"card_{id(self)}"
         self.__width = width
         self.__image_height = image_height
         self.__content = content
