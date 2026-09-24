@@ -78,8 +78,8 @@ if type == "Custom components":
     st.subheader("Tile", anchor=False)
 
     with tile(
-        title="Team activity and something and so on a lot of text",
-        # caption="Latest updates",
+        title="Team activity",
+        caption="Latest updates",
         icon=":material/insights:",
         width=200,
         height="content",

@@ -71,7 +71,7 @@ StandardToolbarAction = Literal["select_columns", "export_csv", "clear_filters"]
 _MENU_TREE_CSS = """
 .tg-tree {
     font-family: var(--st-font);
-    font-size: inherit;
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
 }
 .tg-tree.with-background {
@@ -324,7 +324,7 @@ def tree(
 _SMART_TABLE_CSS = """
 .stbl {
     font-family: var(--st-font);
-    font-size: inherit;
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
     overflow-x: auto;
 }
@@ -2385,7 +2385,7 @@ _BREADCRUMBS_CSS = """
     align-items: center;
     flex-wrap: wrap;
     font-family: var(--st-font);
-    font-size: inherit;
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
 }
 .bc a, .bc span.bc-link {
@@ -2549,7 +2549,7 @@ _PERSONA_CSS = """
     height: fit-content;
     min-height: 0;
     font-family: var(--st-font);
-    font-size: inherit;
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
 }
 .persona.bottom { flex-direction: column; }
@@ -2838,6 +2838,8 @@ _ICON_CSS = """
     display: inline-flex;
     flex-direction: column;
     align-items: center;
+    font-family: var(--st-font);
+    font-size: var(--st-base-font-size);
 }
 .stplus-icon-label {
     margin-top: -0.15rem;
@@ -3145,7 +3147,8 @@ _TILE_CSS = """
     gap: 0.1rem 0.25rem;
     align-items: stretch;
     padding: 0.15rem 0.25rem 0.1rem;
-    font-size: inherit;
+    font-family: var(--st-font);
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
 }
 .tile-header-left .tile-icon {
@@ -3163,6 +3166,7 @@ _TILE_CSS = """
 }
 .tile-title {
     font-weight: 600;
+    font-size: 1.15em;
     line-height: 1.25;
     overflow-wrap: anywhere;
     white-space: normal;
@@ -3458,7 +3462,7 @@ _CALENDAR_CSS = """
     display: inline-block;
     position: relative;
     font-family: var(--st-font);
-    font-size: inherit;
+    font-size: var(--st-base-font-size);
     color: var(--st-text-color);
 }
 .cal.with-border {
