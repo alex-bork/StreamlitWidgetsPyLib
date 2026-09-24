@@ -110,7 +110,7 @@ if type == "Custom components":
         # vertical_alignment="center",
     ):
         persona(
-            name="Alex Bork",
+            name="Jordan Reyes",
             role="Developer",
             status="Offline",
             avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
@@ -124,7 +124,7 @@ if type == "Custom components":
         )
 
         persona(
-            name="Alex Bork",
+            name="Jordan Reyes",
             role="Developer",
             status="Offline",
             avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
@@ -204,7 +204,7 @@ if type == "Custom components":
             columns=["Name", "Role", "Status", "Notes"],
             rows=[
                 [
-                    "Alex Bork",
+                    "Jordan Reyes",
                     "Developer",
                     "Online",
                     "Leads the backend platform team and maintains the shared "
@@ -421,7 +421,7 @@ else:  # "Widgets"
     st.subheader("Card", anchor=False)
 
     Card(
-        title="Alex Bork",
+        title="Jordan Reyes",
         subtitle="Senior Developer",
         status="Online",
         status_color="active",
