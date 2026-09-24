@@ -2577,7 +2577,7 @@ _ICON_CSS = """
 .stplus-icon.small { width: 2rem; height: 2rem; font-size: 1.4rem; }
 .stplus-icon.medium { font-size: 1.75rem; }
 .stplus-icon.large { width: 3rem; height: 3rem; font-size: 2.1rem; }
-.stplus-icon-count {
+.stplus-icon-status {
     position: absolute;
     top: -0.1rem;
     right: -0.1rem;
@@ -2593,8 +2593,8 @@ _ICON_CSS = """
     font-size: 0.7rem;
     font-weight: 600;
 }
-.stplus-icon.small .stplus-icon-count { min-width: 0.95rem; height: 0.95rem; font-size: 0.625rem; }
-.stplus-icon.large .stplus-icon-count { min-width: 1.25rem; height: 1.25rem; font-size: 0.75rem; }
+.stplus-icon.small .stplus-icon-status { min-width: 0.95rem; height: 0.95rem; font-size: 0.625rem; }
+.stplus-icon.large .stplus-icon-status { min-width: 1.25rem; height: 1.25rem; font-size: 0.75rem; }
 .stplus-icon .material-symbols-rounded {
     font-family: 'Material Symbols Rounded';
     font-size: inherit;
@@ -2639,11 +2639,14 @@ export default function(component) {
     const onClick = () => setTriggerValue("clicked", Date.now());
     if (model.clickable) root.addEventListener("click", onClick);
 
-    if (model.count > 0) {
-        const count = document.createElement("span");
-        count.className = "stplus-icon-count";
-        count.textContent = String(model.count);
-        root.appendChild(count);
+    const hasStatus = typeof model.status === "string"
+        ? model.status !== ""
+        : typeof model.status === "number" && model.status > 0;
+    if (hasStatus) {
+        const status = document.createElement("span");
+        status.className = "stplus-icon-status";
+        status.textContent = String(model.status);
+        root.appendChild(status);
     }
 
     // The icon glyph uses the Material Symbols font that Streamlit already
@@ -2668,7 +2671,7 @@ def icon(
     material_name: str,
     size: Literal["small", "medium", "large"] = "medium",
     *,
-    count: int = 0,
+    status: Union[int, str] = 0,
     on_click: Optional[Callable[[], None]] = None,
     color: Optional[str] = None,
     label: str = "",
@@ -2688,8 +2691,10 @@ def icon(
         )
     if size not in ("small", "medium", "large"):
         raise ValueError("'size' must be 'small', 'medium' or 'large'.")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError("'count' must be a non-negative integer.")
+    if not isinstance(status, str) and (
+        not isinstance(status, int) or isinstance(status, bool) or status < 0
+    ):
+        raise ValueError("'status' must be a non-negative integer or string.")
     if not isinstance(label, str):
         raise ValueError("'label' must be a string.")
     if label_visibility not in ("visible", "hidden", "collapsed"):
@@ -2700,7 +2705,7 @@ def icon(
         {
             "materialName": material_name,
             "size": size,
-            "count": count,
+            "status": status,
             "clickable": on_click is not None,
             "color": color,
             "label": label,

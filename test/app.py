@@ -36,7 +36,7 @@ if type == "Custom components":
         icon(
             material_name=":material/box:",
             size="medium",
-            count=3,
+            status=3,
             on_click=lambda: st.toast("Icon clicked"),
         )
         icon(
@@ -44,7 +44,7 @@ if type == "Custom components":
             # label_visibility="collapsed",
             material_name=":material/box:",
             size="medium",
-            # count=3,
+            status="1000",
             # on_click=lambda: st.toast("Icon clicked"),
         )
 
@@ -94,7 +94,6 @@ if type == "Custom components":
         # st.metric("Active users", 128, delta="12%")
         st.write("This is regular Streamlit content inside the tile.")
         # st.button("hi")
-
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Persona", anchor=False)
