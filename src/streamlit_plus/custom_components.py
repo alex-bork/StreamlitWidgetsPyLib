@@ -2909,8 +2909,7 @@ export default function(component) {
     const model = JSON.parse(data || "{}");
     const header = document.createElement("div");
     const iconPosition = (model.icon_position || "right").toLowerCase();
-    const normalizedPosition = iconPosition === "top" ? "center" : iconPosition;
-    header.className = `tile-header tile-header-${normalizedPosition}`;
+    header.className = `tile-header tile-header-${iconPosition}`;
 
     const heading = document.createElement("div");
     heading.className = "tile-heading";
@@ -3000,7 +2999,7 @@ class _TileContext:
         title: str,
         caption: str,
         icon: Optional[str],
-        icon_position: Literal["left", "center", "right", "top"],
+        icon_position: Literal["left", "center", "right"],
         width: Width,
         height: Optional[Height],
         border: bool,
@@ -3014,7 +3013,7 @@ class _TileContext:
                 "title": title,
                 "caption": caption,
                 "icon": icon,
-                "icon_position": "center" if icon_position == "top" else icon_position,
+                "icon_position": icon_position,
                 "key": key or "tile",
             }
         )
@@ -3028,17 +3027,9 @@ class _TileContext:
         self._last_click_state_key = f"{key}_last_click"
         self._container = None
 
-    def _on_clicked(self):
-        component_state = st.session_state.get(f"{self._key}_event", {})
-        click_value = component_state.get("clicked")
-        if click_value is not None and click_value != st.session_state.get(
-            self._last_click_state_key
-        ):
-            st.session_state[self._last_click_state_key] = click_value
-            if self._on_click is not None:
-                self._on_click()
-
-    def __enter__(self):
+    def _render(self):
+        if self._container is not None:
+            return
         tile_styles = []
         if self._bg_color is not None:
             tile_styles.append(
@@ -3063,12 +3054,26 @@ class _TileContext:
         if self._height is not None:
             container_args["height"] = cast(Height, self._height)
         self._container = st.container(**container_args)
+        with self._container:
+            _tile_component(
+                data=self._data,
+                key=f"{self._key}_event",
+                on_clicked_change=self._on_clicked,
+            )
+
+    def _on_clicked(self):
+        component_state = st.session_state.get(f"{self._key}_event", {})
+        click_value = component_state.get("clicked")
+        if click_value is not None and click_value != st.session_state.get(
+            self._last_click_state_key
+        ):
+            st.session_state[self._last_click_state_key] = click_value
+            if self._on_click is not None:
+                self._on_click()
+
+    def __enter__(self):
+        self._render()
         self._container.__enter__()
-        _tile_component(
-            data=self._data,
-            key=f"{self._key}_event",
-            on_clicked_change=self._on_clicked,
-        )
         return self._container
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -3082,11 +3087,11 @@ def tile(
     *,
     width: Width = "stretch",
     height: Optional[Height] = None,
-    border: bool = False,
-    shape: Literal["square", "flexible"] = "flexible",
+    border: bool = True,
+    shape: Literal["square", "flexible"] = "square",
     bg_color: Optional[str] = None,
-    scrollable: bool = True,
-    icon_position: Literal["left", "center", "right", "top"] = "right",
+    scrollable: bool = False,
+    icon_position: Literal["left", "center", "right"] = "left",
     on_click: Optional[Callable[[], None]] = None,
     key: Optional[str] = None,
 ) -> _TileContext:
@@ -3097,9 +3102,8 @@ def tile(
     ``height``; ``shape="flexible"`` uses the supplied height.
     ``bg_color`` accepts hex or ``rgb(...)``/``rgba(...)`` colors.
     ``icon`` is optional; if omitted, only the title/caption are shown.
-    ``icon_position`` controls the top-aligned horizontal placement of the
-    icon: ``"left"``, ``"center"``, or ``"right"``. ``"top"`` is accepted
-    as a backwards-compatible alias for ``"center"``.
+    ``icon_position`` controls the horizontal placement of the icon:
+    ``"left"``, ``"center"``, or ``"right"``.
     Set ``scrollable=False`` to hide vertical overflow in a fixed-height tile.
     ``on_click`` is called once for each tile click.
     """
@@ -3108,8 +3112,8 @@ def tile(
         raise ValueError("'border' must be a boolean.")
     if not isinstance(scrollable, bool):
         raise ValueError("'scrollable' must be a boolean.")
-    if icon_position not in ("left", "center", "right", "top"):
-        raise ValueError("'icon_position' must be 'left', 'center', 'right' or 'top'.")
+    if icon_position not in ("left", "center", "right"):
+        raise ValueError("'icon_position' must be 'left', 'center' or 'right'.")
     if bg_color is not None and not re.fullmatch(
         r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"
         r"|rgba?\(\s*(?:\d{1,3}%?\s*,\s*){2}"
@@ -3123,8 +3127,9 @@ def tile(
         if not isinstance(width, int) or isinstance(width, bool):
             raise ValueError("'width' must be an integer when shape='square'.")
         height = width
-    tile_key = _validate_css_key(key) if key else _default_key("tile")
-    return _TileContext(
+    title_key = re.sub(r"[^A-Za-z0-9_-]+", "-", title).strip("-_") or "tile"
+    tile_key = _validate_css_key(key) if key else _validate_css_key(title_key)
+    context = _TileContext(
         title,
         caption,
         icon,
@@ -3137,6 +3142,8 @@ def tile(
         on_click,
         tile_key,
     )
+    context._render()
+    return context
 
 
 # ---------------------------------------------------------------------------

@@ -79,21 +79,22 @@ if type == "Custom components":
 
     with tile(
         title="Team activity and something and so on a lot of text",
-        caption="Latest updates",
+        # caption="Latest updates",
         icon=":material/insights:",
         width=200,
         height="content",
-        icon_position="left",
-        border=True,
-        shape="square",
+        # icon_position="left",
+        # border=True,
+        # shape="square",
         # bg_color="rgb(245, 247, 250)",
-        key="demo_tile",
-        scrollable=False,
+        # key="demo_tile",
+        # scrollable=False,
         on_click=lambda: st.toast("Tile clicked"),
     ):
         # st.metric("Active users", 128, delta="12%")
         st.write("This is regular Streamlit content inside the tile.")
         # st.button("hi")
+
 
     st.container(height=SPACE_HEIGHT, border=False)
     st.subheader("Persona", anchor=False)
