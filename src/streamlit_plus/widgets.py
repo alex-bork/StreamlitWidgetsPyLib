@@ -2,7 +2,7 @@ import html
 import re
 
 from dataclasses import dataclass
-from typing import Callable, List, Literal, Optional, Union
+from typing import Callable, List, Literal, Optional, Union, cast
 
 import streamlit as st
 
@@ -43,6 +43,13 @@ def _validate_css_color(color: str) -> str:
     if not isinstance(color, str) or not _CSS_COLOR_RE.fullmatch(color):
         raise ValueError("'bg_color' must be a hex or rgb/rgba color.")
     return color
+
+
+def _safe_theme_color(value: object, fallback: str) -> str:
+    """Return a theme color only when it is safe to interpolate into CSS."""
+    if isinstance(value, str) and _CSS_COLOR_RE.fullmatch(value):
+        return value
+    return fallback
 
 
 @dataclass
@@ -129,16 +136,18 @@ class FormWizard:
             finished_key, False
         )
         active = st.session_state[self.__key]
-        inactive_background = st.get_option(
-            "theme.secondaryBackgroundColor"
-        ) or "var(--secondary-background-color, rgba(151, 166, 195, 0.25))"
-        active_background = st.get_option(
-            "theme.primaryColor"
-        ) or "var(--primary-color, #FF4B4B)"
+        inactive_background = _safe_theme_color(
+            st.get_option("theme.secondaryBackgroundColor"),
+            "var(--secondary-background-color, rgba(151, 166, 195, 0.25))",
+        )
+        active_background = _safe_theme_color(
+            st.get_option("theme.primaryColor"),
+            "var(--primary-color, #FF4B4B)",
+        )
         is_last = active == len(self.__steps) - 1
 
         # One bordered container wrapping the whole widget.
-        with st.container(border=True, width=self.__width):
+        with st.container(border=True, width=cast(Width, self.__width)):
             if self.__name:
                 st.markdown(
                     '<h3 style="text-align: center; margin: 0;">'
@@ -287,12 +296,17 @@ class Box:
         # Match the sidebar background: prefer the sidebar's own configured
         # color, then the secondary background (the sidebar's default), then
         # the CSS-variable fallback.
-        background = (
-            self.__bg_color
-            or st.get_option("theme.sidebar.backgroundColor")
-            or st.get_option("theme.secondaryBackgroundColor")
-            or "var(--secondary-background-color, rgba(151, 166, 195, 0.25))"
-        )
+        background = self.__bg_color
+        if background is None:
+            background = _safe_theme_color(
+                st.get_option("theme.sidebar.backgroundColor"),
+                "",
+            )
+        if not background:
+            background = _safe_theme_color(
+                st.get_option("theme.secondaryBackgroundColor"),
+                "var(--secondary-background-color, rgba(151, 166, 195, 0.25))",
+            )
         st.markdown(
             "<style>"
             f".st-key-{self.__key} {{"
@@ -305,14 +319,18 @@ class Box:
         )
         with st.container(
             key=self.__key,
-            width=self.__width,
-            height=self.__height if self.__height is not None else "content",
+            width=cast(Width, self.__width),
+            height=cast(
+                Height,
+                self.__height if self.__height is not None else "content",
+            ),
         ):
             for content in self.__contents:
                 content()
 
 
 class Card:
+
     def __init__(
         self,
         title: Optional[str] = None,
@@ -322,7 +340,7 @@ class Card:
         *,
         status_color: Literal["active", "inactive"] = "inactive",
         key: Optional[str] = None,
-        width: Optional[str | int] = "stretch",
+        width: Width = "stretch",
         image_height: Optional[int] = None,
         content: Callable[[], None],
     ) -> None:
@@ -357,7 +375,11 @@ class Card:
                 "</style>",
                 unsafe_allow_html=True,
             )
-        with st.container(border=True, key=self.__key, width=self.__width):
+        with st.container(
+            border=True,
+            key=self.__key,
+            width=cast(Width, self.__width),
+        ):
             st.image(self.__image_url, width="stretch") if self.__image_url else None
             st.markdown(self.__title) if self.__title else None
             st.caption(self.__subtitle) if self.__subtitle else None

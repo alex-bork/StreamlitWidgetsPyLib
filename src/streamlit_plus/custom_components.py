@@ -9,6 +9,7 @@ import streamlit as st
 Width = Union[int, Literal["stretch", "content"]]
 Height = Union[int, Literal["stretch", "content"]]
 LabelVisibility = Literal["visible", "hidden", "collapsed"]
+_components_v2 = cast(Any, st.components).v2
 
 
 def _default_key(prefix: str, depth: int = 2) -> str:
@@ -235,7 +236,7 @@ export default function(component) {
 }
 """
 
-_menu_tree_component = st.components.v2.component(
+_menu_tree_component = _components_v2.component(
     name="menu_tree",
     css=_MENU_TREE_CSS,
     js=_MENU_TREE_JS,
@@ -517,7 +518,7 @@ _SMART_TABLE_CSS = """
 }
 .stbl-toolbar {
     display: flex;
-        position: relative;
+    position: relative;
     justify-content: flex-end;
     gap: 0;
     margin-bottom: 0.15rem;
@@ -690,22 +691,48 @@ _SMART_TABLE_CSS = """
 .stbl-pager .page-menu-arrow {
     position: absolute;
     right: 0.35rem;
+    z-index: 1;
     bottom: 0.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: transparent;
     color: var(--st-text-color);
     font-family: 'Material Symbols Rounded';
     font-size: 1rem;
     line-height: 1;
-    pointer-events: none;
+    cursor: pointer;
+}
+.stbl-pager .page-menu-arrow:hover {
+    background: var(--st-secondary-background-color);
 }
 .stbl-pager .page-menu-arrow-up {
     position: absolute;
     top: 0.2rem;
     right: 0.35rem;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: transparent;
     color: var(--st-text-color);
     font-family: 'Material Symbols Rounded';
     font-size: 1rem;
     line-height: 1;
-    pointer-events: none;
+    cursor: pointer;
+}
+.stbl-pager .page-menu-arrow-up:hover {
+    background: var(--st-secondary-background-color);
 }
 .stbl-pager .page-menu.last-page .page-menu-arrow {
     display: none !important;
@@ -749,19 +776,59 @@ _SMART_TABLE_CSS = """
 }
 .stbl-filter {
     width: 100%;
-    box-sizing: border-box;
+    position: relative;
     margin-bottom: 0.5rem;
     padding: 0.35rem 0.5rem;
     font: inherit;
-    font-weight: 400;
+}
+.stbl-toolbar .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.3rem;
     color: var(--st-text-color);
-    background: var(--st-secondary-background-color);
+    background: transparent;
     border: 1px solid transparent;
     border-radius: var(--st-base-radius, 0.5rem);
-    outline: none;
+    cursor: pointer;
+    opacity: 0.7;
 }
-.stbl-filter:focus {
-    border-color: var(--st-primary-color);
+.stbl-toolbar .toolbar-btn:hover:not(:disabled) {
+    color: var(--st-primary-color);
+    opacity: 1;
+}
+.stbl-filter-wrap {
+    position: relative;
+    margin-bottom: 0.5rem;
+}
+.stbl-filter-wrap .stbl-filter {
+    margin-bottom: 0;
+    padding-right: 2rem;
+}
+.stbl-filter-clear {
+    position: absolute;
+    top: 50%;
+    right: 0.35rem;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--st-base-radius, 0.5rem);
+    background: transparent;
+    color: var(--st-text-color);
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.65;
+    transform: translateY(-50%);
+}
+.stbl-filter-clear:hover {
+    background: var(--st-secondary-background-color);
+    opacity: 1;
 }
 """
 
@@ -1121,12 +1188,29 @@ export default function(component) {
 
     // Optional filter box.
     let filterInput = null;
+    let filterClearButton = null;
     if (filterable) {
+        const filterWrap = document.createElement("div");
+        filterWrap.className = "stbl-filter-wrap";
         filterInput = document.createElement("input");
         filterInput.type = "text";
         filterInput.className = "stbl-filter";
         filterInput.placeholder = "Filter...";
-        wrapper.appendChild(filterInput);
+        filterClearButton = document.createElement("button");
+        filterClearButton.type = "button";
+        filterClearButton.className = "stbl-filter-clear";
+        filterClearButton.setAttribute("aria-label", "Clear search");
+        filterClearButton.textContent = "x";
+        filterClearButton.onclick = () => {
+            filterInput.value = "";
+            filterClearButton.style.display = "none";
+            currentPage = 0;
+            applyFilters();
+            filterInput.focus();
+        };
+        filterWrap.appendChild(filterInput);
+        filterWrap.appendChild(filterClearButton);
+        wrapper.appendChild(filterWrap);
     }
 
     const table = document.createElement("table");
@@ -1135,7 +1219,7 @@ export default function(component) {
     table.classList.add(
         model.columnWidth === "content" ? "cw-content" : "cw-auto"
     );
-    const coloredRows = model.coloredRows === true;
+    const zebraStripping = model.zebraStripping === true;
 
     // Header row.
     const thead = document.createElement("thead");
@@ -1609,8 +1693,14 @@ export default function(component) {
             for (let c = 0; c < colCount; c++) {
                 const td = document.createElement("td");
                 td.innerHTML = "&nbsp;";
+                if (selectable && c === 0) {
+                    td.className = "select-col";
+                } else {
+                    const columnIndex = c - (selectable ? 1 : 0);
+                    td.dataset.col = String(columnIndex);
+                    columnElements[columnIndex].push(td);
+                }
                 tr.appendChild(td);
-                if (c < columns.length) columnElements[c].push(td);
             }
             tbody.appendChild(tr);
             fillerRows.push(tr);
@@ -1694,42 +1784,53 @@ export default function(component) {
                     closeMenu();
                     clearSelection(false);  // changing page drops the selection
                     currentPage = p;
-                    applyFilters();
                     setStateValue("page", currentPage);
+                    applyFilters();
                 };
                 menuList.appendChild(option);
             }
             menu.appendChild(menuList);
             if (menuList.childElementCount > 3) {
-                pageArrow = document.createElement("span");
+                pageArrow = document.createElement("button");
+                pageArrow.type = "button";
                 pageArrow.className = "page-menu-arrow";
+                pageArrow.setAttribute("aria-label", "Scroll pages down");
                 pageArrow.textContent = "expand_more";
                 pageArrow.title = "More pages below";
                 menu.appendChild(pageArrow);
-                pageArrowUp = document.createElement("span");
+                pageArrowUp = document.createElement("button");
+                pageArrowUp.type = "button";
                 pageArrowUp.className = "page-menu-arrow-up";
+                pageArrowUp.setAttribute("aria-label", "Scroll pages up");
                 pageArrowUp.textContent = "expand_less";
                 pageArrowUp.title = "More pages above";
                 menu.appendChild(pageArrowUp);
+                pageArrow.onclick = (event) => {
+                    event.stopPropagation();
+                    menuList.scrollTop = Math.min(
+                        menuList.scrollHeight,
+                        menuList.scrollTop + Math.max(40, menuList.clientHeight * 0.75)
+                    );
+                };
+                pageArrowUp.onclick = (event) => {
+                    event.stopPropagation();
+                    menuList.scrollTop = Math.max(
+                        0,
+                        menuList.scrollTop - Math.max(40, menuList.clientHeight * 0.75)
+                    );
+                };
             }
             const updatePageArrow = () => {
-                const isLastPage = currentPage >= totalPages - 1;
-                menu.classList.toggle("last-page", isLastPage);
-                if (isLastPage) {
-                    menuList.scrollTop = menuList.scrollHeight;
-                }
                 if (pageArrow) {
-                    pageArrow.style.display = isLastPage ? "none" : (
-                        menuList.scrollTop + menuList.clientHeight <
-                            menuList.scrollHeight - 4
-                            ? ""
-                            : "none"
-                    );
+                    pageArrow.style.display = menuList.scrollTop +
+                        menuList.clientHeight < menuList.scrollHeight - 4
+                        ? ""
+                        : "none";
                 }
                 if (pageArrowUp) {
-                    pageArrowUp.style.display = isLastPage
+                    pageArrowUp.style.display = menuList.scrollTop > 4
                         ? ""
-                        : menuList.scrollTop > 4 ? "" : "none";
+                        : "none";
                 }
             };
             const positionMenu = () => {
@@ -1757,25 +1858,21 @@ export default function(component) {
                     const activeOption = menuList.querySelector(
                         ".page-option.active"
                     );
-                    if (activeOption) {
-                        if (currentPage >= totalPages - 1) {
-                            menuList.scrollTop = menuList.scrollHeight;
-                        } else {
-                            menuList.scrollTop = Math.max(
-                                0,
-                                activeOption.offsetTop -
-                                    (menuList.clientHeight - activeOption.offsetHeight) / 2
-                            );
-                        }
-                    }
-                    // A rerender can leave stale scroll state behind even when the
-                    // selected item is already on the final page, so always normalize
-                    // the menu to the bottom before showing it.
-                    if (currentPage >= totalPages - 1) {
-                        menuList.scrollTop = menuList.scrollHeight;
-                    }
                     positionMenu();
-                    updatePageArrow();
+                    requestAnimationFrame(() => {
+                        if (activeOption) {
+                            if (currentPage >= totalPages - 1) {
+                                menuList.scrollTop = menuList.scrollHeight;
+                            } else {
+                                menuList.scrollTop = Math.max(
+                                    0,
+                                    activeOption.offsetTop -
+                                        (menuList.clientHeight - activeOption.offsetHeight) / 2
+                                );
+                            }
+                        }
+                        updatePageArrow();
+                    });
                     window.addEventListener("scroll", positionMenu, true);
                     window.addEventListener("resize", positionMenu);
                     pageMenuCleanup = closeMenu;
@@ -1878,7 +1975,7 @@ export default function(component) {
         pageRows.forEach((tr, i) => {
             tr.style.display = "";
             // Band alternating visible rows (correct across pages/filtering).
-            if (coloredRows) tr.classList.toggle("banded", i % 2 === 1);
+            if (zebraStripping) tr.classList.toggle("banded", i % 2 === 1);
         });
 
         // Track the last visible row so its bottom border can be removed
@@ -1920,6 +2017,11 @@ export default function(component) {
 
     if (filterInput) {
         filterInput.oninput = () => {
+            if (filterClearButton) {
+                filterClearButton.style.display = filterInput.value
+                    ? "inline-flex"
+                    : "none";
+            }
             currentPage = 0;  // reset to first page on a new search
             applyFilters();
         };
@@ -1981,7 +2083,7 @@ export default function(component) {
 }
 """
 
-_smart_table_component = st.components.v2.component(
+_smart_table_component = _components_v2.component(
     name="smart_table",
     css=_SMART_TABLE_CSS,
     js=_SMART_TABLE_JS,
@@ -2013,7 +2115,7 @@ def table(
     page_size: Union[bool, int] = False,
     switch_page: Literal["number", "selectbox"] = "number",
     column_width: Literal["auto", "content"] = "auto",
-    colored_rows: bool = False,
+    zebra_stripping: bool = True,
     standard_toolbar: bool = True,
     standard_toolbar_exclude: Optional[
         Union[StandardToolbarAction, List[StandardToolbarAction]]
@@ -2062,8 +2164,8 @@ def table(
         column_width: How columns are sized. ``"auto"`` (default) gives evenly
             sized columns and truncates overflowing text with an ellipsis.
             ``"content"`` sizes each column to its content without truncation.
-        colored_rows: When ``True``, alternating rows get a subtle background
-            tint (zebra striping). Defaults to ``False``.
+        zebra_stripping: When ``True``, alternating rows get a subtle
+            background tint. Defaults to ``True``.
         standard_toolbar: Whether to show the standard toolbar buttons
             (export to CSV and column selection, plus clear filters when
             filtering is enabled). Defaults to ``True``.
@@ -2108,6 +2210,8 @@ def table(
         )
     if not isinstance(draggable_columns, bool):
         raise ValueError("'draggable_columns' must be a boolean.")
+    if not isinstance(zebra_stripping, bool):
+        raise ValueError("'zebra_stripping' must be a boolean.")
     if page_size is not False and (
         not isinstance(page_size, int) or isinstance(page_size, bool) or page_size < 1
     ):
@@ -2203,7 +2307,7 @@ def table(
             "switchPage": switch_page,
             "currentPage": current_page,
             "columnWidth": column_width,
-            "coloredRows": colored_rows,
+            "zebraStripping": zebra_stripping,
             "standardToolbar": standard_toolbar,
             "standardToolbarExclude": inactive_standard,
             "toolbarAlign": toolbar_align,
@@ -2372,7 +2476,7 @@ export default function(component) {
 }
 """
 
-_breadcrumbs_component = st.components.v2.component(
+_breadcrumbs_component = _components_v2.component(
     name="breadcrumbs",
     css=_BREADCRUMBS_CSS,
     js=_BREADCRUMBS_JS,
@@ -2572,7 +2676,7 @@ export default function(component) {
 }
 """
 
-_persona_component = st.components.v2.component(
+_persona_component = _components_v2.component(
     name="persona",
     css=_PERSONA_CSS,
     js=_PERSONA_JS,
@@ -2684,11 +2788,14 @@ def persona(
                 "border-radius: var(--st-base-radius, 0.5rem) !important; }</style>",
                 unsafe_allow_html=True,
             )
-            action_popover = st.popover(
-                popover_label,
-                key=popover_key,
-                **({"width": popover_width} if popover_width is not None else {}),
-            )
+            if popover_width is None:
+                action_popover = st.popover(popover_label, key=popover_key)
+            else:
+                action_popover = st.popover(
+                    popover_label,
+                    key=popover_key,
+                    width=cast(Width, popover_width),
+                )
             st.markdown(
                 f"<style>.st-key-{popover_key} [data-testid='stPopoverButton'] "
                 "{ opacity: 0 !important; width: 0 !important; "
@@ -2819,7 +2926,7 @@ export default function(component) {
 }
 """
 
-_icon_component = st.components.v2.component(
+_icon_component = _components_v2.component(
     name="icon",
     css=_ICON_CSS,
     js=_ICON_JS,
@@ -2872,14 +2979,14 @@ def icon(
         }
     )
     event_key = key
-    callback = None
+    event_callback: Optional[Callable[[], None]] = None
     if on_click is not None:
         auto_key = _default_key("icon", depth=2)
         key_suffix = re.sub(r"[^a-zA-Z0-9_]+", "_", label or material_name)
         event_key = key or f"{auto_key}_{key_suffix}"
         last_click_key = f"{event_key}_last_click"
 
-        def callback():
+        def handle_click():
             component_state = st.session_state.get(event_key, {})
             click_value = component_state.get("clicked")
             if click_value is not None and click_value != st.session_state.get(
@@ -2888,11 +2995,13 @@ def icon(
                 st.session_state[last_click_key] = click_value
                 on_click()
 
+            event_callback = handle_click
+
     _icon_component(
         data=data,
         key=event_key,
         width=width,
-        on_clicked_change=callback,
+        on_clicked_change=event_callback,
     )
 
 
@@ -2940,7 +3049,7 @@ export default function(component) {
 }
 """
 
-_clickable_component = st.components.v2.component(
+_clickable_component = _components_v2.component(
     name="clickable",
     js=_CLICKABLE_JS,
 )
@@ -2986,6 +3095,8 @@ class _ClickableContext:
         return self._container
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self._container is None:
+            raise RuntimeError("Clickable context was not entered.")
         return self._container.__exit__(exc_type, exc_value, traceback)
 
 
@@ -3149,7 +3260,7 @@ export default function(component) {
 }
 """
 
-_tile_component = st.components.v2.component(
+_tile_component = _components_v2.component(
     name="tile",
     css=_TILE_CSS,
     js=_TILE_JS,
@@ -3237,10 +3348,14 @@ class _TileContext:
 
     def __enter__(self):
         self._render()
+        if self._container is None:
+            raise RuntimeError("Tile context failed to render.")
         self._container.__enter__()
         return self._container
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self._container is None:
+            raise RuntimeError("Tile context was not entered.")
         return self._container.__exit__(exc_type, exc_value, traceback)
 
 
@@ -3963,7 +4078,7 @@ export default function(component) {
 }
 """
 
-_calendar_component = st.components.v2.component(
+_calendar_component = _components_v2.component(
     name="calendar",
     css=_CALENDAR_CSS,
     js=_CALENDAR_JS,

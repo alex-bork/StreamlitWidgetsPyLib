@@ -400,7 +400,7 @@ if type == "Custom components":
             switch_page="selectbox",
             column_width="auto",
             active_columns=["Name", "Role", "Status"],
-            colored_rows=True,
+            # zebra_stripping=True,
             standard_toolbar=True,
             standard_toolbar_exclude=["export_csv"],
             toolbar_align="right",
