@@ -1,5 +1,11 @@
 # streamlit_plus
 
+> ⚠️ **Built with vibe coding**
+>
+> This project was created via vibe coding. I've tested it as thoroughly as I could, but I make **no guarantees** and take **no responsibility** for any issues, bugs, or damages that may arise from using it. **Use it at your own risk.**
+
+## Description
+
 A small collection of custom widgets and components for [Streamlit](https://streamlit.io/), packaged as `streamlit_plus`. It adds richer, interactive UI building blocks on top of the standard Streamlit toolkit, some built with plain Streamlit containers and styling, others as Custom Components (v2) with their own HTML/CSS/JS.
 
 ## What's inside
@@ -67,10 +73,6 @@ A full demo covering every widget and component lives in [`test/app.py`](test/ap
 ```bash
 streamlit run test/app.py
 ```
-
-## A note on how this was built
-
-This project was created via vibe coding. I've tested it as thoroughly as I could, but I make no guarantees and take no responsibility for any issues, bugs, or damages that may arise from using it. Use it at your own risk.
 
 ## License
 
