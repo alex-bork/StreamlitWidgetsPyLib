@@ -369,6 +369,18 @@ _SMART_TABLE_CSS = """
     font-weight: 600;
     position: relative;
 }
+.stbl .column-drag-label {
+    cursor: grab;
+}
+.stbl .column-drag-label:active {
+    cursor: grabbing;
+}
+.stbl th.column-drag-over-before {
+    box-shadow: inset 3px 0 0 var(--st-primary-color);
+}
+.stbl th.column-drag-over-after {
+    box-shadow: inset -3px 0 0 var(--st-primary-color);
+}
 .stbl th:has(.th-head) { padding-right: 0.35rem; }
 .stbl .th-head {
     display: flex;
@@ -811,6 +823,20 @@ export default function(component) {
     const filtering = model.filtering;
     const filterable = filtering === "table" || filtering === "both";
     const columnFilter = filtering === "column" || filtering === "both";
+    const draggableColumns = model.draggableColumns === true;
+    const savedColumnOrder = stateEl.dataset && stateEl.dataset.stblColumnOrder
+        ? JSON.parse(stateEl.dataset.stblColumnOrder)
+        : null;
+    const validColumnOrder = Array.isArray(savedColumnOrder) &&
+        savedColumnOrder.length === columns.length &&
+        savedColumnOrder.every(
+            (index, position) => Number.isInteger(index) &&
+                index >= 0 && index < columns.length &&
+                savedColumnOrder.indexOf(index) === position
+        );
+    const columnOrder = validColumnOrder
+        ? savedColumnOrder.slice()
+        : columns.map((_, index) => index);
     // ``sorting`` may be true/false or a fixed direction string. A fixed
     // direction restricts each column to that one order (toggle on/off).
     const sortOpt = model.sorting;
@@ -983,7 +1009,10 @@ export default function(component) {
             columnPop = document.createElement("div");
             columnPop.className = "stbl-column-pop";
             columnPop.style.display = "none";
-            columns.forEach((label, colIndex) => {
+            columns
+                .map((label, colIndex) => ({ label, colIndex }))
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .forEach(({ label, colIndex }) => {
                 const option = document.createElement("label");
                 option.className = "stbl-column-option";
                 const checkbox = document.createElement("input");
@@ -1004,7 +1033,7 @@ export default function(component) {
                 option.appendChild(checkbox);
                 option.appendChild(document.createTextNode(label));
                 columnPop.appendChild(option);
-            });
+                });
             // Keep checkbox clicks inside the popover from reaching the
             // document outside-click handler and closing the menu.
             columnPop.onclick = (e) => e.stopPropagation();
@@ -1079,7 +1108,7 @@ export default function(component) {
             const s = v === undefined || v === null ? "" : String(v);
             return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
         };
-        const lines = [columns.map(esc).join(",")];
+        const lines = [columnOrder.map((index) => columns[index]).map(esc).join(",")];
         // Iterate rows in current DOM (sorted) order; export all matching
         // rows across every page, skipping filler rows.
         Array.from(tbody.children).forEach((tr) => {
@@ -1087,7 +1116,9 @@ export default function(component) {
             if (!rowMatches(tr)) return;
             const r = rowEls.indexOf(tr);
             if (r < 0) return;
-            lines.push(rows[r].map(esc).join(","));
+            lines.push(
+                columnOrder.map((index) => rows[r][index]).map(esc).join(",")
+            );
         });
         const blob = new Blob([lines.join("\n")], {
             type: "text/csv;charset=utf-8;",
@@ -1121,6 +1152,121 @@ export default function(component) {
     // Header row.
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
+    let draggedColumn = null;
+    let pointerDrag = null;
+
+    function clearColumnDropIndicator() {
+        headRow.querySelectorAll(
+            ".column-drag-over-before, .column-drag-over-after"
+        ).forEach((th) => {
+            th.classList.remove(
+                "column-drag-over-before", "column-drag-over-after"
+            );
+        });
+    }
+
+    function applyColumnOrder() {
+        columnOrder.forEach((columnIndex) => {
+            const header = headRow.querySelector(
+                `th[data-col="${columnIndex}"]`
+            );
+            if (header) headRow.appendChild(header);
+        });
+        Array.from(tbody.rows).forEach((row) => {
+            columnOrder.forEach((columnIndex) => {
+                const cell = row.querySelector(
+                    `td[data-col="${columnIndex}"]`
+                );
+                if (cell) row.appendChild(cell);
+            });
+        });
+    }
+
+    function reorderColumns(targetColumn, insertAfter) {
+        if (draggedColumn === null || draggedColumn === targetColumn) return;
+        const fromIndex = columnOrder.indexOf(draggedColumn);
+        columnOrder.splice(fromIndex, 1);
+        const targetIndex = columnOrder.indexOf(targetColumn);
+        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        columnOrder.splice(insertIndex, 0, draggedColumn);
+        applyColumnOrder();
+        refreshColumnVisibility();
+        if (stateEl.dataset) {
+            stateEl.dataset.stblColumnOrder = JSON.stringify(columnOrder);
+        }
+        setStateValue("columnOrder", JSON.stringify(columnOrder));
+        setTriggerValue("columnOrder", JSON.stringify(columnOrder));
+    }
+
+    function setupColumnDrag(th, labelEl, columnIndex) {
+        labelEl.draggable = false;
+        labelEl.classList.add("column-drag-label");
+        const clearPointerDrag = () => {
+            pointerDrag = null;
+            draggedColumn = null;
+            clearColumnDropIndicator();
+        };
+        const getDropTarget = (clientX) => {
+            const headers = Array.from(headRow.querySelectorAll("th[data-col]"));
+            for (const header of headers) {
+                const rect = header.getBoundingClientRect();
+                if (clientX >= rect.left && clientX <= rect.right) {
+                    return {
+                        column: Number(header.dataset.col),
+                        after: clientX >= rect.left + rect.width / 2,
+                        header,
+                    };
+                }
+            }
+            return null;
+        };
+        labelEl.onpointerdown = (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            pointerDrag = {
+                column: columnIndex,
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                active: false,
+            };
+            labelEl.setPointerCapture(event.pointerId);
+        };
+        labelEl.onpointermove = (event) => {
+            if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+            const moved = Math.hypot(
+                event.clientX - pointerDrag.startX,
+                event.clientY - pointerDrag.startY
+            );
+            if (!pointerDrag.active && moved < 4) return;
+            pointerDrag.active = true;
+            draggedColumn = columnIndex;
+            const target = getDropTarget(event.clientX);
+            clearColumnDropIndicator();
+            if (target && target.column !== columnIndex) {
+                target.header.classList.add(
+                    target.after
+                        ? "column-drag-over-after"
+                        : "column-drag-over-before"
+                );
+            }
+        };
+        labelEl.onpointerup = (event) => {
+            if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+            if (pointerDrag.active) {
+                const target = getDropTarget(event.clientX);
+                if (target && target.column !== columnIndex) {
+                    reorderColumns(target.column, target.after);
+                }
+            }
+            clearPointerDrag();
+        };
+        labelEl.onpointercancel = clearPointerDrag;
+        labelEl.onlostpointercapture = () => {
+            if (pointerDrag && pointerDrag.active) clearPointerDrag();
+        };
+    }
+
     if (selectable) {
         const th = document.createElement("th");
         th.className = "select-col";
@@ -1335,6 +1481,14 @@ export default function(component) {
             });
         }
 
+        let dragLabel = th.querySelector(".th-head > span:first-child");
+        if (!dragLabel) {
+            dragLabel = document.createElement("span");
+            dragLabel.textContent = th.textContent;
+            th.textContent = "";
+            th.appendChild(dragLabel);
+        }
+        if (draggableColumns) setupColumnDrag(th, dragLabel, colIndex);
         headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -1474,11 +1628,12 @@ export default function(component) {
             fillerRows.push(tr);
         }
     }
+    applyColumnOrder();
 
     function refreshColumnVisibility() {
         let lastVisible = -1;
-        visibleColumns.forEach((visible, colIndex) => {
-            if (visible) lastVisible = colIndex;
+        columnOrder.forEach((colIndex) => {
+            if (visibleColumns[colIndex]) lastVisible = colIndex;
         });
         columnElements.forEach((elements, colIndex) => {
             const visible = visibleColumns[colIndex];
@@ -1861,10 +2016,12 @@ def table(
     *,
     selecting: Literal["single", "multiple", "cell", "none"] = "none",
     on_select: Optional[Callable[[Any], None]] = None,
+    on_columns_change: Optional[Callable[[List[str]], None]] = None,
     key: Optional[str] = None,
     width: Width = "stretch",
     filtering: Union[bool, Literal["table", "column", "both"]] = False,
     sorting: Union[bool, Literal["ascending", "descending"]] = False,
+    draggable_columns: bool = False,
     page_size: Union[bool, int] = False,
     switch_page: Literal["number", "selectbox"] = "number",
     column_width: Literal["auto", "content"] = "auto",
@@ -1890,6 +2047,8 @@ def table(
         on_select: Optional callback invoked with the current selection. In
             row modes it receives the list of selected ids; in cell mode it
             receives ``[row_index, col_index]`` or ``None``.
+        on_columns_change: Optional callback invoked after columns are
+            reordered. It receives the column names in their new order.
         key: Optional Streamlit widget key.
         width: Width of the table. ``"stretch"`` (default), ``"content"``, or a
             fixed pixel width.
@@ -1904,6 +2063,8 @@ def table(
             ``"descending"`` restrict each column to that single direction
             (toggle on/off). ``False`` (default) disables sorting. Sorting is
             numeric-aware and happens client-side.
+        draggable_columns: Whether column names can be dragged to reorder the
+            table. Defaults to ``False``.
         page_size: Rows shown per page. An integer (e.g. ``5``) paginates the
             table with page controls below it. ``False`` (default) shows all
             rows without pagination.
@@ -1957,6 +2118,8 @@ def table(
             f"Invalid filtering {filtering!r}. Expected 'table', 'column', 'both' "
             "or False."
         )
+    if not isinstance(draggable_columns, bool):
+        raise ValueError("'draggable_columns' must be a boolean.")
     if page_size is not False and (
         not isinstance(page_size, int) or isinstance(page_size, bool) or page_size < 1
     ):
@@ -2047,6 +2210,7 @@ def table(
             "selectionMode": selecting,
             "filtering": filtering,
             "sorting": sorting,
+            "draggableColumns": draggable_columns,
             "pageSize": page_size if page_size is not False else 0,
             "switchPage": switch_page,
             "currentPage": current_page,
@@ -2065,6 +2229,7 @@ def table(
             on_selection_change=lambda: None,
             on_page_change=lambda: None,
             on_toolbarAction_change=lambda: None,
+            on_columnOrder_change=lambda: None,
             key=key,
         )
 
@@ -2084,6 +2249,22 @@ def table(
 
     if on_select is not None:
         on_select(current)
+
+    if on_columns_change is not None and result.columnOrder is not None:
+        column_order = json.loads(result.columnOrder)
+        if (
+            isinstance(column_order, list)
+            and len(column_order) == len(columns)
+            and all(
+                isinstance(index, int) and 0 <= index < len(columns)
+                for index in column_order
+            )
+            and len(set(column_order)) == len(columns)
+        ):
+            callback_key = f"_stbl_columns_callback_{key}"
+            if st.session_state.get(callback_key) != result.columnOrder:
+                st.session_state[callback_key] = result.columnOrder
+                on_columns_change([columns[index] for index in column_order])
 
     # Dispatch a custom-toolbar click to its Python callback. A per-click
     # nonce lets us detect a new click and avoid re-firing on reruns.

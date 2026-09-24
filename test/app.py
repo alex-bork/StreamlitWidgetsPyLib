@@ -196,6 +196,9 @@ if type == "Custom components":
         horizontal=True,
     )
 
+    def on_columns_change(column_order):
+        st.toast(f"Columns reordered: {', '.join(column_order)}")
+
     with smart_table_section:
         selected_rows = table(
             columns=["Name", "Role", "Status", "Notes"],
@@ -392,6 +395,7 @@ if type == "Custom components":
             selecting=mode,
             filtering="column",
             sorting=True,
+            draggable_columns=True,
             page_size=7,
             switch_page="selectbox",
             column_width="auto",
@@ -404,6 +408,7 @@ if type == "Custom components":
                 [":material/delete:", lambda sel: st.toast(f"Delete {sel}")],
                 [":material/star:", lambda sel: st.toast(f"Star {sel}")],
             ],
+            on_columns_change=on_columns_change,
             key="demo_smart_table",
         )
 
