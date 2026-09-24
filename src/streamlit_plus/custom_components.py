@@ -71,6 +71,7 @@ StandardToolbarAction = Literal["select_columns", "export_csv", "clear_filters"]
 _MENU_TREE_CSS = """
 .tg-tree {
     font-family: var(--st-font);
+    font-size: inherit;
     color: var(--st-text-color);
 }
 .tg-tree.with-background {
@@ -86,7 +87,6 @@ _MENU_TREE_CSS = """
     padding: 0.2rem 0.4rem;
     border-radius: 0.375rem;
     cursor: pointer;
-    font-size: 0.875rem;
     user-select: none;
 }
 .tg-tree.spacing-small .tg-node { padding-top: 0.05rem; padding-bottom: 0.05rem; }
@@ -324,6 +324,7 @@ def tree(
 _SMART_TABLE_CSS = """
 .stbl {
     font-family: var(--st-font);
+    font-size: inherit;
     color: var(--st-text-color);
     overflow-x: auto;
 }
@@ -331,7 +332,7 @@ _SMART_TABLE_CSS = """
     border-collapse: separate;
     border-spacing: 0;
     width: 100%;
-    font-size: 0.875rem;
+    font-size: inherit;
     /* Rounded outer corners, matching the theme radius used by inputs. */
     border: 1px solid var(--st-border-color);
     border-radius: var(--st-base-radius, 0.5rem);
@@ -2384,6 +2385,7 @@ _BREADCRUMBS_CSS = """
     align-items: center;
     flex-wrap: wrap;
     font-family: var(--st-font);
+    font-size: inherit;
     color: var(--st-text-color);
 }
 .bc a, .bc span.bc-link {
@@ -2425,8 +2427,10 @@ export default function(component) {
     const separator = model.separator || "\u203a";
     const allDisabled = model.allDisabled === true;
 
-    const labelSize = size === "small" ? "0.75rem" : "0.875rem";
-    const sepSize = size === "small" ? "1rem" : "1.125rem";
+    // Sizes are relative to Streamlit's inherited base font so the
+    // breadcrumb scales with the app font while still honoring ``size``.
+    const labelSize = size === "small" ? "0.85em" : "1em";
+    const sepSize = size === "small" ? "1.15em" : "1.3em";
     const sepMargin = size === "small" ? "0.125rem" : "0.25rem";
     const sepNudge = size === "small" ? "0em" : "-0.05em";
 
@@ -2545,6 +2549,7 @@ _PERSONA_CSS = """
     height: fit-content;
     min-height: 0;
     font-family: var(--st-font);
+    font-size: inherit;
     color: var(--st-text-color);
 }
 .persona.bottom { flex-direction: column; }
@@ -2599,9 +2604,12 @@ export default function(component) {
     const radius = shape === "circle"
         ? "50%"
         : "var(--st-base-radius, 0.5rem)";
+    // ``medium`` inherits Streamlit's base font size (name a touch larger,
+    // role/status at the base size). ``small`` and ``large`` keep their own
+    // fixed sizing so they stay visually distinct from the app font.
     const sizes = {
         small: ["0.8125rem", "0.75rem"],
-        medium: ["1.25rem", "0.875rem"],
+        medium: ["1.15em", "1em"],
         large: ["1.5rem", "1rem"],
     }[size];
     const nameSize = sizes[0];
@@ -2710,7 +2718,9 @@ def persona(
         status: Short status text.
         text_align: ``"right"`` (default), ``"left"`` or ``"bottom"``.
         status_color: ``"active"`` (primary) or ``"inactive"`` (default).
-        size: ``"small"`` (default), ``"medium"`` or ``"large"``.
+        size: ``"small"`` (default), ``"medium"`` or ``"large"``. The
+            ``"medium"`` text sizes follow Streamlit's base font size, while
+            ``"small"`` and ``"large"`` use their own fixed text sizes.
         image_shape: ``"circle"`` (default) or ``"none"``.
         popover: Optional function rendered inside a popover when the
             avatar is clicked.
@@ -2832,7 +2842,7 @@ _ICON_CSS = """
 .stplus-icon-label {
     margin-top: -0.15rem;
     color: var(--st-text-color);
-    font-size: 0.875rem;
+    font-size: inherit;
     line-height: 1.25;
     text-align: center;
 }
@@ -3135,6 +3145,7 @@ _TILE_CSS = """
     gap: 0.1rem 0.25rem;
     align-items: stretch;
     padding: 0.15rem 0.25rem 0.1rem;
+    font-size: inherit;
     color: var(--st-text-color);
 }
 .tile-header-left .tile-icon {
@@ -3161,7 +3172,7 @@ _TILE_CSS = """
     margin-top: 0.05rem;
     color: var(--st-text-color);
     opacity: 0.7;
-    font-size: 0.8125rem;
+    font-size: 0.85em;
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3447,6 +3458,7 @@ _CALENDAR_CSS = """
     display: inline-block;
     position: relative;
     font-family: var(--st-font);
+    font-size: inherit;
     color: var(--st-text-color);
 }
 .cal.with-border {
@@ -3499,7 +3511,7 @@ _CALENDAR_CSS = """
 .cal-title {
     width: 100%;
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: inherit;
     text-align: center;
     cursor: pointer;
 }
@@ -3590,7 +3602,7 @@ _CALENDAR_CSS = """
 }
 .cal-month th {
     font-weight: 400;
-    font-size: 0.75rem;
+    font-size: 0.8em;
     opacity: 0.6;
     padding: 0.25rem 0.4rem;
 }
@@ -3606,7 +3618,7 @@ _CALENDAR_CSS = """
     width: 2rem;
     height: 2rem;
     border-radius: 999px;
-    font-size: 0.8125rem;
+    font-size: 0.9em;
     cursor: default;
 }
 .cal.clickable-days .cal-day:not(.outside) { cursor: pointer; }

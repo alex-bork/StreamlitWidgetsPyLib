@@ -43,7 +43,7 @@ if type == "Custom components":
             label="Empty Box",
             # label_visibility="collapsed",
             material_name=":material/box:",
-            size="medium",
+            size="large",
             status="1000",
             # on_click=lambda: st.toast("Icon clicked"),
         )
@@ -115,6 +115,20 @@ if type == "Custom components":
             status="Offline",
             avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
             text_align="right",
+            size="small",
+            image_shape="circle",
+            status_color="active",
+            popover=on_popover,
+            popover_width=300,
+            width="content",
+        )
+
+        persona(
+            name="Jordan Reyes",
+            role="Developer",
+            status="Offline",
+            avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
+            text_align="right",
             size="medium",
             image_shape="circle",
             status_color="active",
@@ -129,7 +143,7 @@ if type == "Custom components":
             status="Offline",
             avatar_url="https://randomuser.me/api/portraits/men/32.jpg",
             text_align="right",
-            size="small",
+            size="large",
             image_shape="circle",
             status_color="active",
             popover=on_popover,

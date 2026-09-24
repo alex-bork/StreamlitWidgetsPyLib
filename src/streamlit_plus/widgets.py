@@ -181,7 +181,7 @@ class FormWizard:
                     st.markdown(
                         f'<span class="wizardStep" style="background: {background}; '
                         f"border-radius: 0.25rem; color: {color}; font-family: inherit; "
-                        'font-size: 0.875rem; padding: 0.25rem 0.5rem;">'
+                        'font-size: inherit; padding: 0.25rem 0.5rem;">'
                         f"{html.escape(label)}</span>",
                         unsafe_allow_html=True,
                     )
