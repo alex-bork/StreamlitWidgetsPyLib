@@ -473,6 +473,11 @@ _SMART_TABLE_CSS = """
 .stbl td.cell-selectable.selected {
     background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
 }
+/* Match the row-selection behavior: a stronger tint on hover so the effect
+   stays visible on selected cells sitting in a zebra-banded row. */
+.stbl td.cell-selectable.selected:hover {
+    background: color-mix(in srgb, var(--st-primary-color) 32%, transparent);
+}
 .stbl .filter-exclude {
     display: flex;
     align-items: center;
@@ -498,9 +503,14 @@ _SMART_TABLE_CSS = """
         var(--st-secondary-background-color) 55%, transparent);
 }
 .stbl tbody tr:hover { background: var(--st-secondary-background-color); }
-.stbl tbody tr.selected > td,
-.stbl tbody tr.selected:hover > td {
+.stbl tbody tr.selected > td {
     background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
+}
+/* A stronger tint on hover so the effect is visible on every selected row,
+   including zebra-banded ones (whose row background already matches the
+   plain hover color and would otherwise show no change). */
+.stbl tbody tr.selected:hover > td {
+    background: color-mix(in srgb, var(--st-primary-color) 32%, transparent);
 }
 .stbl tbody tr.filler-row { cursor: default; }
 .stbl tbody tr.filler-row:hover { background: none; }
