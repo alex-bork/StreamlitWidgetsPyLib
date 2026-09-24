@@ -415,6 +415,8 @@ _SMART_TABLE_CSS = """
 .stbl .filter-icon {
     font-family: 'Material Symbols Rounded';
     font-size: 1.125rem;
+    font-weight: 300;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
     line-height: 1;
     width: 1.125rem;
     height: 1.125rem;
