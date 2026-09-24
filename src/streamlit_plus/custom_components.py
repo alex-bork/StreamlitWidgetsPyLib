@@ -464,6 +464,13 @@ _SMART_TABLE_CSS = """
     border-color: color-mix(in srgb, var(--st-primary-color) 85%, black);
     color: var(--st-primary-content-color, white);
 }
+.stbl tbody tr.selected,
+.stbl tbody tr.selected:hover {
+    background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
+}
+.stbl td.cell-selectable.selected {
+    background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
+}
 .stbl .filter-exclude {
     display: flex;
     align-items: center;
@@ -489,39 +496,20 @@ _SMART_TABLE_CSS = """
         var(--st-secondary-background-color) 55%, transparent);
 }
 .stbl tbody tr:hover { background: var(--st-secondary-background-color); }
+.stbl tbody tr.selected > td,
+.stbl tbody tr.selected:hover > td {
+    background: color-mix(in srgb, var(--st-primary-color) 20%, transparent);
+}
 .stbl tbody tr.filler-row { cursor: default; }
 .stbl tbody tr.filler-row:hover { background: none; }
-.stbl tbody tr.selected {
-    background: var(--st-primary-color);
-    color: var(--st-background-color);
-}
-.stbl tbody tr.selected:hover {
-    background: var(--st-primary-color);
-}
-.stbl tbody tr.selected td {
-    background: var(--st-primary-color);
-    color: var(--st-background-color);
-    border-color: white;
-}
-/* On a selected (primary) row, flip the checkbox/radio accent to the row's
-   text color so it stays visible instead of blending primary-on-primary.
-   The select cell keeps the row/band background (no override). */
+/* Keep selection controls aligned with the table text color. */
 .stbl tbody tr.selected input[type="checkbox"],
 .stbl tbody tr.selected input[type="radio"] {
     accent-color: var(--st-background-color);
 }
 .stbl td.cell-selectable { cursor: pointer; }
-.stbl td.cell-selectable.selected {
-    background: var(--st-primary-color);
-    color: var(--st-background-color);
-    border-color: white;
-}
 .stbl th.visible-column-last, .stbl td.visible-column-last {
     border-right: none;
-}
-.stbl tbody tr.selected td.visible-column-last,
-.stbl td.cell-selectable.selected.visible-column-last {
-    border-right: 1px solid white;
 }
 .stbl input[type="checkbox"], .stbl input[type="radio"] {
     cursor: pointer;
