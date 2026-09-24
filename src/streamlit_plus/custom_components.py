@@ -2160,8 +2160,18 @@ export default function(component) {
     const root = document.createElement("div");
     root.className = "bc " + size + (bgColor ? " hover-" + bgColor : "");
 
+    // Only allow safe, navigable hrefs. Reject javascript:/data:/vbscript:
+    // and any other non-http(s) scheme; relative paths and anchors are fine.
+    // Unsafe values fall back to the non-link span.
+    const isSafeHref = (url) => {
+        if (typeof url !== "string" || url.trim() === "") return false;
+        const trimmed = url.trim();
+        if (/^[/#.?]/.test(trimmed)) return true;
+        return /^https?:\/\//i.test(trimmed);
+    };
+
     items.forEach((item, i) => {
-        const active = !allDisabled && item.page;
+        const active = !allDisabled && item.page && isSafeHref(item.page);
         const el = document.createElement(active ? "a" : "span");
         if (active) {
             el.setAttribute("href", item.page);

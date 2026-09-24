@@ -26,6 +26,25 @@ def _validate_css_key(key: str) -> str:
     return key
 
 
+_CSS_COLOR_RE = re.compile(
+    r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"
+    r"|rgba?\(\s*(?:\d{1,3}%?\s*,\s*){2}"
+    r"\d{1,3}%?(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)"
+)
+
+
+def _validate_css_color(color: str) -> str:
+    """Validate a color interpolated into a raw ``<style>`` block.
+
+    Only hex or ``rgb()``/``rgba()`` values are accepted, so a caller cannot
+    break out of the CSS value and inject arbitrary style or markup. Mirrors
+    the ``bg_color`` guard used by the tile component.
+    """
+    if not isinstance(color, str) or not _CSS_COLOR_RE.fullmatch(color):
+        raise ValueError("'bg_color' must be a hex or rgb/rgba color.")
+    return color
+
+
 @dataclass
 class Step:
     """One step of a :class:`FormWizard`.
@@ -257,7 +276,9 @@ class Box:
             raise ValueError("At least one content callable must be provided.")
         self.__contents = contents
         self.__key = _validate_css_key(key)
-        self.__bg_color = bg_color
+        self.__bg_color = (
+            _validate_css_color(bg_color) if bg_color is not None else None
+        )
         self.__width = width
         self.__height = height
         self.__render()
