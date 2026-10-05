@@ -1,4 +1,4 @@
-from streamlit_plus.custom_components import (
+from streamlit_plus.components import (
     breadcrumbs,
     calendar,
     clickable,

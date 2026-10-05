@@ -9,7 +9,7 @@ from streamlit_plus import (
     table,
     tree,
 )
-from streamlit_plus.custom_components import (
+from streamlit_plus.components import (
     clickable,
     icon,
     tile,
